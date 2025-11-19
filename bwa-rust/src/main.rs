@@ -75,7 +75,7 @@ fn run_index(reference: &str, output: &str) -> Result<()> {
     // Build SA -> BWT -> FM
     let sa = index::sa::build_sa(&text);
     let bwt = index::bwt::build_bwt(&text, &sa);
-    let fm = index::fm::FMIndex::build(bwt, sa, contigs, util::dna::SIGMA as u8, 512);
+    let fm = index::fm::FMIndex::build(text, bwt, sa, contigs, util::dna::SIGMA as u8, 512);
 
     let out_path = format!("{}.fm", output);
     fm.save_to_file(&out_path)?;

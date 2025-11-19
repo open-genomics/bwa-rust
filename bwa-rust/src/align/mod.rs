@@ -221,82 +221,97 @@ pub fn align_fastq(index_path: &str, fastq_path: &str, out_path: Option<&str>) -
         writeln!(out_box, "@SQ\tSN:{}\tLN:{}", c.name, c.len)?;
     }
 
+    // 临时固定的一组 SW 参数（后续可由 CLI 传入）
+    let sw_params = SwParams {
+        match_score: 2,
+        mismatch_penalty: 1,
+        gap_open: 2,
+        gap_extend: 1,
+        band_width: 16,
+    };
+
     // iterate reads
     while let Some(rec) = reader.next_record()? {
         let qname = &rec.id;
         let seq = &rec.seq;
         let qual = &rec.qual;
 
+        if seq.is_empty() {
+            // treat empty read as unmapped
+            let flag = 4;
+            writeln!(
+                out_box,
+                "{}\t{}\t*\t0\t0\t*\t*\t0\t0\t{}\t{}",
+                qname,
+                flag,
+                String::from_utf8_lossy(seq),
+                String::from_utf8_lossy(qual),
+            )?;
+            continue;
+        }
+
         // prepare forward
         let fwd_norm = dna::normalize_seq(seq);
         let fwd_alpha: Vec<u8> = fwd_norm.iter().map(|&b| dna::to_alphabet(b)).collect();
         // prepare reverse complement
-        let rev = dna::revcomp(seq);
-        let rev_alpha: Vec<u8> = rev.iter().map(|&b| dna::to_alphabet(b)).collect();
+        let rev_seq = dna::revcomp(seq);
+        let rev_norm = dna::normalize_seq(&rev_seq);
+        let rev_alpha: Vec<u8> = rev_norm.iter().map(|&b| dna::to_alphabet(b)).collect();
 
-        let mut write_unmapped = true;
+        let mut best_score = 0i32;
+        let mut best_is_rev = false;
+        let mut best_ci = 0usize;
+        let mut best_pos = 0u32; // offset within contig
+        let mut best_cigar = String::new();
+        let mut has_best = false;
 
-        // try forward
-        if let Some((l, r)) = fm.backward_search(&fwd_alpha) {
-            if r > l {
-                let pos = fm.sa_interval_positions(l, r)[0];
-                if let Some((ci, off)) = fm.map_text_pos(pos) {
-                    let contig = &fm.contigs[ci];
-                    // FLAG 0: forward strand
-                    let flag = 0;
-                    let rname = &contig.name;
-                    let pos1 = off + 1; // 1-based
-                    let mapq = 255;
-                    let cigar = format!("{}M", seq.len());
-                    writeln!(
-                        out_box,
-                        "{}\t{}\t{}\t{}\t{}\t{}\t*\t0\t0\t{}\t{}",
-                        qname,
-                        flag,
-                        rname,
-                        pos1,
-                        mapq,
-                        cigar,
-                        String::from_utf8_lossy(seq),
-                        String::from_utf8_lossy(qual),
-                    )?;
-                    write_unmapped = false;
-                }
+        // try forward using seed + banded SW
+        if let Some((score, ci, pos, cigar)) =
+            align_one_direction(&fm, &fwd_norm, &fwd_alpha, sw_params)
+        {
+            if score > 0 {
+                best_score = score;
+                best_is_rev = false;
+                best_ci = ci;
+                best_pos = pos;
+                best_cigar = cigar;
+                has_best = true;
             }
         }
 
-        // try reverse if forward failed
-        if write_unmapped {
-            if let Some((l, r)) = fm.backward_search(&rev_alpha) {
-                if r > l {
-                    let pos = fm.sa_interval_positions(l, r)[0];
-                    if let Some((ci, off)) = fm.map_text_pos(pos) {
-                        let contig = &fm.contigs[ci];
-                        // FLAG 16: reverse complemented
-                        let flag = 16;
-                        let rname = &contig.name;
-                        let pos1 = off + 1; // 1-based
-                        let mapq = 255;
-                        let cigar = format!("{}M", seq.len());
-                        writeln!(
-                            out_box,
-                            "{}\t{}\t{}\t{}\t{}\t{}\t*\t0\t0\t{}\t{}",
-                            qname,
-                            flag,
-                            rname,
-                            pos1,
-                            mapq,
-                            cigar,
-                            String::from_utf8_lossy(seq),
-                            String::from_utf8_lossy(qual),
-                        )?;
-                        write_unmapped = false;
-                    }
-                }
+        // try reverse complement
+        if let Some((score, ci, pos, cigar)) =
+            align_one_direction(&fm, &rev_norm, &rev_alpha, sw_params)
+        {
+            if !has_best || score > best_score {
+                best_score = score;
+                best_is_rev = true;
+                best_ci = ci;
+                best_pos = pos;
+                best_cigar = cigar;
+                has_best = true;
             }
         }
 
-        if write_unmapped {
+        if has_best {
+            let contig = &fm.contigs[best_ci];
+            let flag = if best_is_rev { 16 } else { 0 };
+            let rname = &contig.name;
+            let pos1 = best_pos + 1; // 1-based
+            let mapq = 255; // 暂时固定
+            writeln!(
+                out_box,
+                "{}\t{}\t{}\t{}\t{}\t{}\t*\t0\t0\t{}\t{}",
+                qname,
+                flag,
+                rname,
+                pos1,
+                mapq,
+                best_cigar,
+                String::from_utf8_lossy(seq),
+                String::from_utf8_lossy(qual),
+            )?;
+        } else {
             // unmapped: FLAG 4, RNEXT/PNEXT/SEQ/QUAL as per SAM minimal
             let flag = 4;
             writeln!(
@@ -311,6 +326,106 @@ pub fn align_fastq(index_path: &str, fastq_path: &str, out_path: Option<&str>) -
     }
 
     Ok(())
+}
+
+const MAX_SEED_HITS: usize = 16;
+
+fn align_one_direction(
+    fm: &FMIndex,
+    query_norm: &[u8],
+    query_alpha: &[u8],
+    sw_params: SwParams,
+) -> Option<(i32, usize, u32, String)> {
+    let len = query_alpha.len();
+    if len == 0 {
+        return None;
+    }
+
+    // 取中间的一段作为 seed
+    let seed_len = len.min(20);
+    if seed_len == 0 {
+        return None;
+    }
+    let seed_start = (len - seed_len) / 2;
+    let seed = &query_alpha[seed_start..seed_start + seed_len];
+
+    let (l, r) = match fm.backward_search(seed) {
+        Some(v) => v,
+        None => return None,
+    };
+    if l >= r {
+        return None;
+    }
+
+    let hits = fm.sa_interval_positions(l, r);
+    if hits.is_empty() {
+        return None;
+    }
+
+    let max_hits = MAX_SEED_HITS.min(hits.len());
+    let mut best_score = 0i32;
+    let mut best_ci = 0usize;
+    let mut best_pos: u32 = 0;
+    let mut best_cigar = String::new();
+    let mut has_best = false;
+
+    for &pos in &hits[..max_hits] {
+        if let Some((ci, off_in_contig)) = fm.map_text_pos(pos) {
+            let contig = &fm.contigs[ci];
+            let contig_len = contig.len as usize;
+            let off = off_in_contig as usize;
+            if contig_len == 0 {
+                continue;
+            }
+
+            // 参考窗口：以 seed 起点为中心，左右各扩展约一个 read 长度
+            let flank = query_norm.len().min(contig_len);
+            let win_start_in_contig = off.saturating_sub(flank);
+            let win_end_in_contig = (off + seed_len + flank).min(contig_len);
+            if win_start_in_contig >= win_end_in_contig {
+                continue;
+            }
+
+            let text_start = contig.offset as usize + win_start_in_contig;
+            let text_end = text_start + (win_end_in_contig - win_start_in_contig);
+
+            let mut ref_window: Vec<u8> = Vec::with_capacity(win_end_in_contig - win_start_in_contig);
+            for &code in &fm.text[text_start..text_end] {
+                if code == 0 {
+                    break; // 不跨越 contig 分隔符
+                }
+                ref_window.push(dna::from_alphabet(code));
+            }
+            if ref_window.is_empty() {
+                continue;
+            }
+
+            let sw_res = banded_sw(query_norm, &ref_window, sw_params);
+            if sw_res.score <= 0 || sw_res.cigar.is_empty() {
+                continue;
+            }
+
+            let global_off_in_contig = win_start_in_contig + sw_res.ref_start;
+            if global_off_in_contig >= contig_len {
+                continue;
+            }
+
+            let score = sw_res.score;
+            if !has_best || score > best_score {
+                best_score = score;
+                best_ci = ci;
+                best_pos = global_off_in_contig as u32;
+                best_cigar = sw_res.cigar;
+                has_best = true;
+            }
+        }
+    }
+
+    if has_best {
+        Some((best_score, best_ci, best_pos, best_cigar))
+    } else {
+        None
+    }
 }
 
 #[cfg(test)]

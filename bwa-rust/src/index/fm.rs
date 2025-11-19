@@ -25,10 +25,12 @@ pub struct FMIndex {
     pub sa: Vec<u32>,
     /// contig 元信息（名称、长度、起始偏移）
     pub contigs: Vec<Contig>,
+    /// 原始文本（数值化字母表，包含 contig 间的 0 分隔符）
+    pub text: Vec<u8>,
 }
 
 impl FMIndex {
-    pub fn build(bwt: Vec<u8>, sa: Vec<u32>, contigs: Vec<Contig>, sigma: u8, block: usize) -> Self {
+    pub fn build(text: Vec<u8>, bwt: Vec<u8>, sa: Vec<u32>, contigs: Vec<Contig>, sigma: u8, block: usize) -> Self {
         let n = bwt.len();
         let sigma_us = sigma as usize;
         // 计算 C 表
@@ -63,7 +65,7 @@ impl FMIndex {
             }
         }
 
-        Self { sigma, block: block_u, c, bwt, occ_samples, sa, contigs }
+        Self { sigma, block: block_u, c, bwt, occ_samples, sa, contigs, text }
     }
 
     #[inline]
