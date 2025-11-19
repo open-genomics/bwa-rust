@@ -105,4 +105,37 @@ mod tests {
 
         assert!(r.next_record().unwrap().is_none());
     }
+
+    #[test]
+    fn parse_fasta_with_crlf_and_whitespace() {
+        let data = b">chr1 desc\r\nAC g t n\r\n acgt\r\n>chr2 \r\n N N N \r\n";
+        let cursor = Cursor::new(&data[..]);
+        let mut r = FastaReader::new(cursor);
+
+        let r1 = r.next_record().unwrap().unwrap();
+        assert_eq!(r1.id, "chr1");
+        assert_eq!(r1.desc.as_deref(), Some("desc"));
+        assert_eq!(r1.seq, b"ACGTNACGT");
+
+        let r2 = r.next_record().unwrap().unwrap();
+        assert_eq!(r2.id, "chr2");
+        assert_eq!(r2.desc, None);
+        assert_eq!(r2.seq, b"NNN");
+
+        assert!(r.next_record().unwrap().is_none());
+    }
+
+    #[test]
+    fn parse_fasta_with_leading_empty_lines() {
+        let data = b"\n\n>chr1\nACGT\n";
+        let cursor = Cursor::new(&data[..]);
+        let mut r = FastaReader::new(cursor);
+
+        let r1 = r.next_record().unwrap().unwrap();
+        assert_eq!(r1.id, "chr1");
+        assert_eq!(r1.desc, None);
+        assert_eq!(r1.seq, b"ACGT");
+
+        assert!(r.next_record().unwrap().is_none());
+    }
 }
