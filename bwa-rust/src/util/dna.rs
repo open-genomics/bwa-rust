@@ -58,3 +58,55 @@ pub fn revcomp(seq: &[u8]) -> Vec<u8> {
     }
     out
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn normalize_seq_basic() {
+        let input = b"acgtuXnN";
+        let out = normalize_seq(input);
+        assert_eq!(out, b"ACGTTNNN");
+    }
+
+    #[test]
+    fn to_from_alphabet_roundtrip() {
+        assert_eq!(to_alphabet(0), 0);
+        assert_eq!(to_alphabet(b'A'), 1);
+        assert_eq!(to_alphabet(b'a'), 1);
+        assert_eq!(to_alphabet(b'C'), 2);
+        assert_eq!(to_alphabet(b'c'), 2);
+        assert_eq!(to_alphabet(b'G'), 3);
+        assert_eq!(to_alphabet(b'T'), 4);
+        assert_eq!(to_alphabet(b'U'), 4);
+        assert_eq!(to_alphabet(b'N'), 5);
+        assert_eq!(to_alphabet(b'x'), 5);
+
+        assert_eq!(from_alphabet(0), 0);
+        assert_eq!(from_alphabet(1), b'A');
+        assert_eq!(from_alphabet(2), b'C');
+        assert_eq!(from_alphabet(3), b'G');
+        assert_eq!(from_alphabet(4), b'T');
+        assert_eq!(from_alphabet(5), b'N');
+        assert_eq!(from_alphabet(100), b'N');
+    }
+
+    #[test]
+    fn complement_and_revcomp() {
+        assert_eq!(complement(b'A'), b'T');
+        assert_eq!(complement(b'a'), b'T');
+        assert_eq!(complement(b'C'), b'G');
+        assert_eq!(complement(b'G'), b'C');
+        assert_eq!(complement(b'T'), b'A');
+        assert_eq!(complement(b'U'), b'A');
+        assert_eq!(complement(b'N'), b'N');
+        assert_eq!(complement(b'x'), b'N');
+
+        let seq = b"ACGTN";
+        let rc = revcomp(seq);
+        assert_eq!(rc, b"NACGT");
+        let back = revcomp(&rc);
+        assert_eq!(back, seq);
+    }
+}
