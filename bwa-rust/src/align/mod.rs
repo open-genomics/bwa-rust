@@ -451,103 +451,85 @@ fn align_one_direction(
         return None;
     }
 
-    // 取中间的一段作为 seed
-    let seed_len = len.min(20);
-    if seed_len == 0 {
-        return None;
-    }
-    let seed_start = (len - seed_len) / 2;
-    let seed = &query_alpha[seed_start..seed_start + seed_len];
-
-    let (l, r) = match fm.backward_search(seed) {
-        Some(v) => v,
-        None => return None,
-    };
-    if l >= r {
+    // 使用 MEM/链 进行候选生成
+    let min_mem_len = len.min(20).max(1);
+    let seeds = find_mem_seeds(fm, query_alpha, min_mem_len);
+    if seeds.is_empty() {
         return None;
     }
 
-    let hits = fm.sa_interval_positions(l, r);
-    if hits.is_empty() {
-        return None;
-    }
-
-    let max_hits = MAX_SEED_HITS.min(hits.len());
-    let mut best_score = 0i32;
-    let mut best_ci = 0usize;
-    let mut best_pos: u32 = 0;
-    let mut best_cigar = String::new();
-    let mut best_nm: u32 = 0;
+    let mut best: Option<DirectionBest> = None;
     let mut second_best_score = 0i32;
-    let mut has_best = false;
 
-    for &pos in &hits[..max_hits] {
-        if let Some((ci, off_in_contig)) = fm.map_text_pos(pos) {
-            let contig = &fm.contigs[ci];
+    for (ci, contig) in fm.contigs.iter().enumerate() {
+        let seeds_ci: Vec<MemSeed> = seeds
+            .iter()
+            .filter(|s| s.contig == ci)
+            .cloned()
+            .collect();
+        if seeds_ci.is_empty() {
+            continue;
+        }
+
+        if let Some(chain) = best_chain(&seeds_ci, len) {
+            let offset = contig.offset as usize;
             let contig_len = contig.len as usize;
-            let off = off_in_contig as usize;
             if contig_len == 0 {
                 continue;
             }
-
-            // 参考窗口：以 seed 起点为中心，左右各扩展约一个 read 长度
-            let flank = query_norm.len().min(contig_len);
-            let win_start_in_contig = off.saturating_sub(flank);
-            let win_end_in_contig = (off + seed_len + flank).min(contig_len);
-            if win_start_in_contig >= win_end_in_contig {
+            let mut ref_seq: Vec<u8> = Vec::with_capacity(contig_len);
+            for &code in &fm.text[offset..offset + contig_len] {
+                ref_seq.push(dna::from_alphabet(code));
+            }
+            if ref_seq.is_empty() {
                 continue;
             }
 
-            let text_start = contig.offset as usize + win_start_in_contig;
-            let text_end = text_start + (win_end_in_contig - win_start_in_contig);
+            let res = chain_to_alignment(&chain, query_norm, &ref_seq, sw_params);
+            if res.score <= 0 || res.cigar.is_empty() {
+                continue;
+            }
 
-            let mut ref_window: Vec<u8> = Vec::with_capacity(win_end_in_contig - win_start_in_contig);
-            for &code in &fm.text[text_start..text_end] {
-                if code == 0 {
-                    break; // 不跨越 contig 分隔符
+            let rb_min = chain
+                .seeds
+                .iter()
+                .map(|s| s.rb)
+                .min()
+                .unwrap_or(0);
+
+            let cand_score = res.score;
+            if let Some(ref mut b) = best {
+                if cand_score > b.best_score {
+                    if b.best_score > second_best_score {
+                        second_best_score = b.best_score;
+                    }
+                    *b = DirectionBest {
+                        best_score: cand_score,
+                        best_ci: ci,
+                        best_pos: rb_min,
+                        best_cigar: res.cigar,
+                        best_nm: res.nm,
+                        second_best_score,
+                    };
+                } else if cand_score > second_best_score {
+                    second_best_score = cand_score;
                 }
-                ref_window.push(dna::from_alphabet(code));
-            }
-            if ref_window.is_empty() {
-                continue;
-            }
-
-            let sw_res = banded_sw(query_norm, &ref_window, sw_params);
-            if sw_res.score <= 0 || sw_res.cigar.is_empty() {
-                continue;
-            }
-
-            let global_off_in_contig = win_start_in_contig + sw_res.ref_start;
-            if global_off_in_contig >= contig_len {
-                continue;
-            }
-
-            let score = sw_res.score;
-            if !has_best || score > best_score {
-                if has_best && best_score > second_best_score {
-                    second_best_score = best_score;
-                }
-                best_score = score;
-                best_ci = ci;
-                best_pos = global_off_in_contig as u32;
-                best_cigar = sw_res.cigar;
-                best_nm = sw_res.nm;
-                has_best = true;
-            } else if score > second_best_score {
-                second_best_score = score;
+            } else {
+                best = Some(DirectionBest {
+                    best_score: cand_score,
+                    best_ci: ci,
+                    best_pos: rb_min,
+                    best_cigar: res.cigar,
+                    best_nm: res.nm,
+                    second_best_score: 0,
+                });
             }
         }
     }
 
-    if has_best {
-        Some(DirectionBest {
-            best_score,
-            best_ci,
-            best_pos,
-            best_cigar,
-            best_nm,
-            second_best_score,
-        })
+    if let Some(mut b) = best {
+        b.second_best_score = second_best_score;
+        Some(b)
     } else {
         None
     }
@@ -704,6 +686,103 @@ pub fn best_chain(seeds: &[MemSeed], max_gap: usize) -> Option<Chain> {
         seeds: seeds_vec,
         score,
     })
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct ChainAlignResult {
+    pub score: i32,
+    pub cigar: String,
+    pub nm: u32,
+}
+
+pub fn chain_to_alignment(
+    chain: &Chain,
+    query: &[u8],
+    reference: &[u8],
+    p: SwParams,
+) -> ChainAlignResult {
+    if chain.seeds.is_empty() {
+        return ChainAlignResult {
+            score: 0,
+            cigar: String::new(),
+            nm: 0,
+        };
+    }
+
+    let mut seeds = chain.seeds.clone();
+    seeds.sort_by_key(|s| (s.qb, s.rb));
+
+    let mut ops: Vec<(char, usize)> = Vec::new();
+    let mut total_score: i32 = 0;
+    let mut total_nm: u32 = 0;
+
+    let k = seeds.len();
+    for idx in 0..k {
+        if idx > 0 {
+            let prev = &seeds[idx - 1];
+            let curr = &seeds[idx];
+            let q_gap_start = prev.qe;
+            let q_gap_end = curr.qb;
+            let r_gap_start = prev.re as usize;
+            let r_gap_end = curr.rb as usize;
+            if q_gap_end > q_gap_start && r_gap_end > r_gap_start {
+                let q_gap = &query[q_gap_start..q_gap_end];
+                let r_gap = &reference[r_gap_start..r_gap_end];
+                let res = banded_sw(q_gap, r_gap, p);
+                if res.score > 0 && !res.cigar.is_empty() {
+                    let mut num = 0usize;
+                    for ch in res.cigar.chars() {
+                        if ch.is_ascii_digit() {
+                            num = num * 10 + (ch as usize - '0' as usize);
+                        } else {
+                            if num > 0 {
+                                let op_ch = ch;
+                                if let Some(last) = ops.last_mut() {
+                                    if last.0 == op_ch {
+                                        last.1 += num;
+                                    } else {
+                                        ops.push((op_ch, num));
+                                    }
+                                } else {
+                                    ops.push((op_ch, num));
+                                }
+                                num = 0;
+                            }
+                        }
+                    }
+                    total_score += res.score;
+                    total_nm += res.nm;
+                }
+            }
+        }
+
+        let s = &seeds[idx];
+        let len = s.qe - s.qb;
+        if len > 0 {
+            if let Some(last) = ops.last_mut() {
+                if last.0 == 'M' {
+                    last.1 += len;
+                } else {
+                    ops.push(('M', len));
+                }
+            } else {
+                ops.push(('M', len));
+            }
+            total_score += (len as i32) * p.match_score;
+        }
+    }
+
+    let mut cigar = String::new();
+    for (op, len) in ops {
+        use std::fmt::Write as _;
+        let _ = write!(&mut cigar, "{}{}", len, op);
+    }
+
+    ChainAlignResult {
+        score: total_score,
+        cigar,
+        nm: total_nm,
+    }
 }
 
 #[cfg(test)]
