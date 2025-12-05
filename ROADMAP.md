@@ -101,19 +101,19 @@
 
 ### 2.1 抽象对齐配置结构
 
-- [ ] 在 `align` 模块中定义 `AlignOpt`（或类似）结构
+- [x] 在 `align` 模块中定义 `AlignOpt`（或类似）结构
   - [ ] 字段示例：
-    - [ ] `match_score`、`mismatch_penalty`；
-    - [ ] `gap_open`、`gap_extend`；
-    - [ ] `band_width`（带状 SW 的带宽）；
+    - [x] `match_score`、`mismatch_penalty`；
+    - [x] `gap_open`、`gap_extend`；
+    - [x] `band_width`（带状 SW 的带宽）；
     - [ ] `max_mismatch` 或 `score_threshold` 等简化配置。
 
-- [ ] 将 CLI 与 `AlignOpt` 关联
-  - [ ] 在 `Commands::Align` 中增加可选参数：
-    - [ ] `--match` / `--mismatch`；
-    - [ ] `--gap-open` / `--gap-ext`；
-    - [ ] `--band-width`；
-  - [ ] 在 `run_align` 中解析这些参数并传入 `align_fastq` 或新的对齐入口函数。
+- [x] 将 CLI 与 `AlignOpt` 关联
+  - [x] 在 `Commands::Align` 中增加可选参数：
+    - [x] `--match` / `--mismatch`；
+    - [x] `--gap-open` / `--gap-ext`；
+    - [x] `--band-width`；
+  - [x] 在 `run_align` 中解析这些参数并传入 `align_fastq` 或新的对齐入口函数。
 
 ### 2.2 从精确匹配扩展到“种子 + 简单局部 SW”
 

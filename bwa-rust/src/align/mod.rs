@@ -563,9 +563,155 @@ struct DirectionBest {
     second_best_score: i32,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MemSeed {
+    pub contig: usize,
+    pub qb: usize,
+    pub qe: usize,
+    pub rb: u32,
+    pub re: u32,
+}
+
+pub fn find_mem_seeds(
+    fm: &FMIndex,
+    query_alpha: &[u8],
+    min_len: usize,
+) -> Vec<MemSeed> {
+    let n = query_alpha.len();
+    if min_len == 0 || n == 0 || min_len > n {
+        return Vec::new();
+    }
+
+    let mut seeds = Vec::new();
+
+    for qb in 0..n {
+        if qb + min_len > n {
+            break;
+        }
+
+        let mut best_len = 0usize;
+        let mut best_l = 0usize;
+        let mut best_r = 0usize;
+
+        let mut len = min_len;
+        while qb + len <= n {
+            let pat = &query_alpha[qb..qb + len];
+            match fm.backward_search(pat) {
+                Some((l, r)) if l < r => {
+                    best_len = len;
+                    best_l = l;
+                    best_r = r;
+                    len += 1;
+                }
+                _ => break,
+            }
+        }
+
+        if best_len >= min_len {
+            for &pos in fm.sa_interval_positions(best_l, best_r) {
+                if let Some((ci, off)) = fm.map_text_pos(pos) {
+                    let rb = off;
+                    let re = off + best_len as u32;
+                    seeds.push(MemSeed {
+                        contig: ci,
+                        qb,
+                        qe: qb + best_len,
+                        rb,
+                        re,
+                    });
+                }
+            }
+        }
+    }
+
+    seeds
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Chain {
+    pub contig: usize,
+    pub seeds: Vec<MemSeed>,
+    pub score: u32,
+}
+
+pub fn best_chain(seeds: &[MemSeed], max_gap: usize) -> Option<Chain> {
+    if seeds.is_empty() {
+        return None;
+    }
+
+    let mut idxs: Vec<usize> = (0..seeds.len()).collect();
+    idxs.sort_by_key(|&i| {
+        let s = &seeds[i];
+        (s.contig, s.qb, s.rb)
+    });
+
+    let n = idxs.len();
+    let mut dp: Vec<u32> = vec![0; n];
+    let mut prev: Vec<Option<usize>> = vec![None; n];
+    let mut best_i: Option<usize> = None;
+
+    for (t, &i) in idxs.iter().enumerate() {
+        let si = &seeds[i];
+        let len_i = (si.qe - si.qb) as u32;
+        dp[t] = len_i;
+
+        for (u, &j) in idxs[..t].iter().enumerate() {
+            let sj = &seeds[j];
+            if sj.contig != si.contig {
+                continue;
+            }
+            if sj.qe > si.qb {
+                continue;
+            }
+            if sj.re > si.rb {
+                continue;
+            }
+            let gap_q = si.qb - sj.qe;
+            let gap_r = (si.rb - sj.re) as usize;
+            if gap_q > max_gap || gap_r > max_gap {
+                continue;
+            }
+            let cand = dp[u] + len_i;
+            if cand > dp[t] {
+                dp[t] = cand;
+                prev[t] = Some(u);
+            }
+        }
+
+        if best_i
+            .map(|bi| dp[t] > dp[bi])
+            .unwrap_or(true)
+        {
+            best_i = Some(t);
+        }
+    }
+
+    let best_t = best_i?;
+    let mut chain_idxs: Vec<usize> = Vec::new();
+    let mut cur = Some(best_t);
+    while let Some(t) = cur {
+        chain_idxs.push(idxs[t]);
+        cur = prev[t];
+    }
+    chain_idxs.reverse();
+
+    let contig = seeds[chain_idxs[0]].contig;
+    let seeds_vec: Vec<MemSeed> = chain_idxs.into_iter().map(|i| seeds[i].clone()).collect();
+    let score = dp[best_t];
+
+    Some(Chain {
+        contig,
+        seeds: seeds_vec,
+        score,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::index::{bwt, sa};
+    use crate::index::fm::{Contig, FMIndex};
+    use crate::util::dna;
 
     fn default_params() -> SwParams {
         SwParams {
@@ -627,5 +773,114 @@ mod tests {
         assert_eq!(compute_mapq(50, 0), 60);
         assert_eq!(compute_mapq(50, 25), 30);
         assert_eq!(compute_mapq(10, 10), 0);
+    }
+
+    fn build_test_fm(seq: &[u8]) -> FMIndex {
+        let norm = dna::normalize_seq(seq);
+        let mut text: Vec<u8> = Vec::new();
+        for &b in &norm {
+            text.push(dna::to_alphabet(b));
+        }
+        let len = text.len() as u32;
+        let contigs = vec![Contig {
+            name: "chr1".to_string(),
+            len,
+            offset: 0,
+        }];
+        text.push(0);
+        let sa = sa::build_sa(&text);
+        let bwt = bwt::build_bwt(&text, &sa);
+        FMIndex::build(text, bwt, sa, contigs, dna::SIGMA as u8, 4)
+    }
+
+    #[test]
+    fn mem_seeds_basic() {
+        let fm = build_test_fm(b"ACGTACGT");
+        let read = b"CGTA";
+        let norm = dna::normalize_seq(read);
+        let alpha: Vec<u8> = norm.iter().map(|&b| dna::to_alphabet(b)).collect();
+        let seeds = find_mem_seeds(&fm, &alpha, 2);
+        assert!(
+            seeds
+                .iter()
+                .any(|s| s.contig == 0 && s.qb == 0 && s.qe == 4 && s.rb == 1 && s.re == 5)
+        );
+    }
+
+    #[test]
+    fn mem_seeds_respect_min_len() {
+        let fm = build_test_fm(b"ACGTACGT");
+        let read = b"CGTA";
+        let norm = dna::normalize_seq(read);
+        let alpha: Vec<u8> = norm.iter().map(|&b| dna::to_alphabet(b)).collect();
+        let seeds = find_mem_seeds(&fm, &alpha, 5);
+        assert!(seeds.is_empty());
+    }
+
+    #[test]
+    fn best_chain_simple_diagonal() {
+        let seeds = vec![
+            MemSeed {
+                contig: 0,
+                qb: 0,
+                qe: 4,
+                rb: 0,
+                re: 4,
+            },
+            MemSeed {
+                contig: 0,
+                qb: 4,
+                qe: 8,
+                rb: 4,
+                re: 8,
+            },
+        ];
+        let chain = best_chain(&seeds, 10).expect("chain");
+        assert_eq!(chain.contig, 0);
+        assert_eq!(chain.seeds.len(), 2);
+        assert_eq!(chain.score, 8);
+    }
+
+    #[test]
+    fn best_chain_avoids_overlapping_and_far_gaps() {
+        let seeds = vec![
+            MemSeed {
+                contig: 0,
+                qb: 0,
+                qe: 4,
+                rb: 0,
+                re: 4,
+            },
+            // overlap on read / ref，不能接在第一个后面
+            MemSeed {
+                contig: 0,
+                qb: 3,
+                qe: 6,
+                rb: 3,
+                re: 6,
+            },
+            // 离第一个太远，超过 max_gap
+            MemSeed {
+                contig: 0,
+                qb: 20,
+                qe: 24,
+                rb: 20,
+                re: 24,
+            },
+            // 合理间距，可与第一个组成链
+            MemSeed {
+                contig: 0,
+                qb: 4,
+                qe: 8,
+                rb: 4,
+                re: 8,
+            },
+        ];
+
+        let chain = best_chain(&seeds, 10).expect("chain");
+        assert_eq!(chain.seeds.len(), 2);
+        assert_eq!(chain.seeds[0].qb, 0);
+        assert_eq!(chain.seeds[1].qb, 4);
+        assert_eq!(chain.score, 8);
     }
 }
