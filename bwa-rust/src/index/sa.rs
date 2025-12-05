@@ -49,6 +49,24 @@ pub fn build_sa(text: &[u8]) -> Vec<u32> {
 mod tests {
     use super::*;
 
+    fn naive_sa(text: &[u8]) -> Vec<u32> {
+        let n = text.len();
+        let mut suffixes: Vec<(usize, &[u8])> = (0..n).map(|i| (i, &text[i..])).collect();
+        suffixes.sort_by(|a, b| a.1.cmp(b.1));
+        suffixes.into_iter().map(|(i, _)| i as u32).collect()
+    }
+
+    fn make_text(len: usize) -> Vec<u8> {
+        let mut x: u32 = 1_234_567;
+        let mut v = Vec::with_capacity(len);
+        for _ in 0..len {
+            x = x.wrapping_mul(1_103_515_245).wrapping_add(12_345);
+            let val = (x % 6) as u8;
+            v.push(val);
+        }
+        v
+    }
+
     #[test]
     fn sa_basic() {
         // 文本：A C G T $  -> 1 2 3 4 0
@@ -56,5 +74,24 @@ mod tests {
         let sa = build_sa(&text);
         // 期望：后缀按字典序：$, A$, C$, G$, T$
         assert_eq!(sa, vec![4, 0, 1, 2, 3]);
+    }
+
+    #[test]
+    fn sa_matches_naive_on_small_random_texts() {
+        for len in 1..=20 {
+            let text = make_text(len);
+            let sa_fast = build_sa(&text);
+            let sa_naive = naive_sa(&text);
+            assert_eq!(sa_fast, sa_naive, "mismatch on len={}", len);
+        }
+    }
+
+    #[test]
+    fn sa_handles_multiple_separators() {
+        // 文本：A C $ G $  -> 1 2 0 3 0
+        let text = [1u8, 2, 0, 3, 0];
+        let sa = build_sa(&text);
+        let expected = naive_sa(&text);
+        assert_eq!(sa, expected);
     }
 }
