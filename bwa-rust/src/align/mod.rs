@@ -16,6 +16,27 @@ pub struct SwParams {
     pub band_width: usize,
 }
 
+#[derive(Clone, Copy, Debug)]
+pub struct AlignOpt {
+    pub match_score: i32,
+    pub mismatch_penalty: i32,
+    pub gap_open: i32,
+    pub gap_extend: i32,
+    pub band_width: usize,
+}
+
+impl Default for AlignOpt {
+    fn default() -> Self {
+        Self {
+            match_score: 2,
+            mismatch_penalty: 1,
+            gap_open: 2,
+            gap_extend: 1,
+            band_width: 16,
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Eq)]
 pub struct SwResult {
     pub score: i32,
@@ -231,6 +252,16 @@ pub fn banded_sw(query: &[u8], reference: &[u8], p: SwParams) -> SwResult {
 }
 
 pub fn align_fastq(index_path: &str, fastq_path: &str, out_path: Option<&str>) -> Result<()> {
+    let opt = AlignOpt::default();
+    align_fastq_with_opt(index_path, fastq_path, out_path, opt)
+}
+
+pub fn align_fastq_with_opt(
+    index_path: &str,
+    fastq_path: &str,
+    out_path: Option<&str>,
+    opt: AlignOpt,
+) -> Result<()> {
     // load FM index
     let fm = FMIndex::load_from_file(index_path)?;
 
@@ -252,11 +283,11 @@ pub fn align_fastq(index_path: &str, fastq_path: &str, out_path: Option<&str>) -
 
     // 临时固定的一组 SW 参数（后续可由 CLI 传入）
     let sw_params = SwParams {
-        match_score: 2,
-        mismatch_penalty: 1,
-        gap_open: 2,
-        gap_extend: 1,
-        band_width: 16,
+        match_score: opt.match_score,
+        mismatch_penalty: opt.mismatch_penalty,
+        gap_open: opt.gap_open,
+        gap_extend: opt.gap_extend,
+        band_width: opt.band_width,
     };
 
     // iterate reads

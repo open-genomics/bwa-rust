@@ -33,6 +33,16 @@ enum Commands {
         /// Output SAM path (stdout if omitted)
         #[arg(short, long)]
         out: Option<String>,
+        #[arg(long = "match", default_value_t = 2)]
+        match_score: i32,
+        #[arg(long = "mismatch", default_value_t = 1)]
+        mismatch_penalty: i32,
+        #[arg(long = "gap-open", default_value_t = 2)]
+        gap_open: i32,
+        #[arg(long = "gap-ext", default_value_t = 1)]
+        gap_extend: i32,
+        #[arg(long = "band-width", default_value_t = 16)]
+        band_width: usize,
     },
 }
 
@@ -40,7 +50,25 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
     match cli.command {
         Commands::Index { reference, output } => run_index(&reference, &output),
-        Commands::Align { index, reads, out } => run_align(&index, &reads, out.as_deref()),
+        Commands::Align {
+            index,
+            reads,
+            out,
+            match_score,
+            mismatch_penalty,
+            gap_open,
+            gap_extend,
+            band_width,
+        } => {
+            let opt = align::AlignOpt {
+                match_score,
+                mismatch_penalty,
+                gap_open,
+                gap_extend,
+                band_width,
+            };
+            run_align(&index, &reads, out.as_deref(), opt)
+        }
     }
 }
 
@@ -83,6 +111,11 @@ fn run_index(reference: &str, output: &str) -> Result<()> {
     Ok(())
 }
 
-fn run_align(index_path: &str, reads_path: &str, out_path: Option<&str>) -> Result<()> {
-    align::align_fastq(index_path, reads_path, out_path)
+fn run_align(
+    index_path: &str,
+    reads_path: &str,
+    out_path: Option<&str>,
+    opt: align::AlignOpt,
+) -> Result<()> {
+    align::align_fastq_with_opt(index_path, reads_path, out_path, opt)
 }
