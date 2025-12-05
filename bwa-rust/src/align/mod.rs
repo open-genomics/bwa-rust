@@ -24,6 +24,7 @@ pub struct SwResult {
     pub ref_start: usize,
     pub ref_end: usize,
     pub cigar: String,
+    pub nm: u32,
 }
 
 pub fn banded_sw(query: &[u8], reference: &[u8], p: SwParams) -> SwResult {
@@ -38,6 +39,7 @@ pub fn banded_sw(query: &[u8], reference: &[u8], p: SwParams) -> SwResult {
             ref_start: 0,
             ref_end: 0,
             cigar: String::new(),
+            nm: 0,
         };
     }
 
@@ -123,6 +125,7 @@ pub fn banded_sw(query: &[u8], reference: &[u8], p: SwParams) -> SwResult {
             ref_start: 0,
             ref_end: 0,
             cigar: String::new(),
+            nm: 0,
         };
     }
 
@@ -173,6 +176,31 @@ pub fn banded_sw(query: &[u8], reference: &[u8], p: SwParams) -> SwResult {
     let ref_end = best_j;
 
     ops.reverse();
+
+    let mut nm = 0u32;
+    let mut qi = query_start;
+    let mut rj = ref_start;
+    for &op in &ops {
+        match op {
+            'M' => {
+                if query[qi] != reference[rj] {
+                    nm += 1;
+                }
+                qi += 1;
+                rj += 1;
+            }
+            'I' => {
+                nm += 1;
+                qi += 1;
+            }
+            'D' => {
+                nm += 1;
+                rj += 1;
+            }
+            _ => {}
+        }
+    }
+
     let mut cigar = String::new();
     if !ops.is_empty() {
         let mut cur = ops[0];
@@ -198,6 +226,7 @@ pub fn banded_sw(query: &[u8], reference: &[u8], p: SwParams) -> SwResult {
         ref_start,
         ref_end,
         cigar,
+        nm,
     }
 }
 
@@ -258,37 +287,64 @@ pub fn align_fastq(index_path: &str, fastq_path: &str, out_path: Option<&str>) -
         let rev_norm = dna::normalize_seq(&rev_seq);
         let rev_alpha: Vec<u8> = rev_norm.iter().map(|&b| dna::to_alphabet(b)).collect();
 
-        let mut best_score = 0i32;
+        let fwd_res = align_one_direction(&fm, &fwd_norm, &fwd_alpha, sw_params);
+        let rev_res = align_one_direction(&fm, &rev_norm, &rev_alpha, sw_params);
+
+        let mut has_best = false;
         let mut best_is_rev = false;
         let mut best_ci = 0usize;
-        let mut best_pos = 0u32; // offset within contig
+        let mut best_pos = 0u32;
         let mut best_cigar = String::new();
-        let mut has_best = false;
+        let mut best_score = 0i32;
+        let mut best_nm: u32 = 0;
+        let mut second_best_score = 0i32;
 
-        // try forward using seed + banded SW
-        if let Some((score, ci, pos, cigar)) =
-            align_one_direction(&fm, &fwd_norm, &fwd_alpha, sw_params)
-        {
-            if score > 0 {
-                best_score = score;
+        match (fwd_res, rev_res) {
+            (None, None) => {}
+            (Some(f), None) => {
                 best_is_rev = false;
-                best_ci = ci;
-                best_pos = pos;
-                best_cigar = cigar;
+                best_ci = f.best_ci;
+                best_pos = f.best_pos;
+                best_cigar = f.best_cigar;
+                best_score = f.best_score;
+                best_nm = f.best_nm;
+                second_best_score = f.second_best_score;
                 has_best = true;
             }
-        }
-
-        // try reverse complement
-        if let Some((score, ci, pos, cigar)) =
-            align_one_direction(&fm, &rev_norm, &rev_alpha, sw_params)
-        {
-            if !has_best || score > best_score {
-                best_score = score;
+            (None, Some(r)) => {
                 best_is_rev = true;
-                best_ci = ci;
-                best_pos = pos;
-                best_cigar = cigar;
+                best_ci = r.best_ci;
+                best_pos = r.best_pos;
+                best_cigar = r.best_cigar;
+                best_score = r.best_score;
+                best_nm = r.best_nm;
+                second_best_score = r.second_best_score;
+                has_best = true;
+            }
+            (Some(f), Some(r)) => {
+                if f.best_score >= r.best_score {
+                    best_is_rev = false;
+                    best_ci = f.best_ci;
+                    best_pos = f.best_pos;
+                    best_cigar = f.best_cigar;
+                    best_score = f.best_score;
+                    best_nm = f.best_nm;
+                    second_best_score = r.best_score;
+                    if f.second_best_score > second_best_score {
+                        second_best_score = f.second_best_score;
+                    }
+                } else {
+                    best_is_rev = true;
+                    best_ci = r.best_ci;
+                    best_pos = r.best_pos;
+                    best_cigar = r.best_cigar;
+                    best_score = r.best_score;
+                    best_nm = r.best_nm;
+                    second_best_score = f.best_score;
+                    if r.second_best_score > second_best_score {
+                        second_best_score = r.second_best_score;
+                    }
+                }
                 has_best = true;
             }
         }
@@ -297,22 +353,26 @@ pub fn align_fastq(index_path: &str, fastq_path: &str, out_path: Option<&str>) -
             let contig = &fm.contigs[best_ci];
             let flag = if best_is_rev { 16 } else { 0 };
             let rname = &contig.name;
-            let pos1 = best_pos + 1; // 1-based
-            let mapq = 255; // 暂时固定
+            let pos1 = best_pos + 1;
+            let mapq = compute_mapq(best_score, second_best_score);
+            let seq_str = String::from_utf8_lossy(seq);
+            let qual_str = String::from_utf8_lossy(qual);
             writeln!(
                 out_box,
-                "{}\t{}\t{}\t{}\t{}\t{}\t*\t0\t0\t{}\t{}",
+                "{}\t{}\t{}\t{}\t{}\t{}\t*\t0\t0\t{}\t{}\tAS:i:{}\tXS:i:{}\tNM:i:{}",
                 qname,
                 flag,
                 rname,
                 pos1,
                 mapq,
                 best_cigar,
-                String::from_utf8_lossy(seq),
-                String::from_utf8_lossy(qual),
+                seq_str,
+                qual_str,
+                best_score,
+                second_best_score,
+                best_nm,
             )?;
         } else {
-            // unmapped: FLAG 4, RNEXT/PNEXT/SEQ/QUAL as per SAM minimal
             let flag = 4;
             writeln!(
                 out_box,
@@ -330,12 +390,31 @@ pub fn align_fastq(index_path: &str, fastq_path: &str, out_path: Option<&str>) -
 
 const MAX_SEED_HITS: usize = 16;
 
+fn compute_mapq(best_score: i32, second_best_score: i32) -> u8 {
+    if best_score <= 0 {
+        return 0;
+    }
+    let diff = (best_score - second_best_score).max(0) as i64;
+    let denom = best_score as i64;
+    if denom <= 0 {
+        return 0;
+    }
+    let mut q = (diff * 60 / denom) as i32;
+    if q < 0 {
+        q = 0;
+    }
+    if q > 60 {
+        q = 60;
+    }
+    q as u8
+}
+
 fn align_one_direction(
     fm: &FMIndex,
     query_norm: &[u8],
     query_alpha: &[u8],
     sw_params: SwParams,
-) -> Option<(i32, usize, u32, String)> {
+) -> Option<DirectionBest> {
     let len = query_alpha.len();
     if len == 0 {
         return None;
@@ -367,6 +446,8 @@ fn align_one_direction(
     let mut best_ci = 0usize;
     let mut best_pos: u32 = 0;
     let mut best_cigar = String::new();
+    let mut best_nm: u32 = 0;
+    let mut second_best_score = 0i32;
     let mut has_best = false;
 
     for &pos in &hits[..max_hits] {
@@ -412,20 +493,43 @@ fn align_one_direction(
 
             let score = sw_res.score;
             if !has_best || score > best_score {
+                if has_best && best_score > second_best_score {
+                    second_best_score = best_score;
+                }
                 best_score = score;
                 best_ci = ci;
                 best_pos = global_off_in_contig as u32;
                 best_cigar = sw_res.cigar;
+                best_nm = sw_res.nm;
                 has_best = true;
+            } else if score > second_best_score {
+                second_best_score = score;
             }
         }
     }
 
     if has_best {
-        Some((best_score, best_ci, best_pos, best_cigar))
+        Some(DirectionBest {
+            best_score,
+            best_ci,
+            best_pos,
+            best_cigar,
+            best_nm,
+            second_best_score,
+        })
     } else {
         None
     }
+}
+
+#[derive(Debug)]
+struct DirectionBest {
+    best_score: i32,
+    best_ci: usize,
+    best_pos: u32,
+    best_cigar: String,
+    best_nm: u32,
+    second_best_score: i32,
 }
 
 #[cfg(test)]
@@ -454,6 +558,7 @@ mod tests {
         assert_eq!(res.ref_start, 0);
         assert_eq!(res.ref_end, 4);
         assert_eq!(res.cigar, "4M");
+        assert_eq!(res.nm, 0);
     }
 
     #[test]
@@ -468,6 +573,7 @@ mod tests {
         assert_eq!(res.ref_start, 0);
         assert_eq!(res.ref_end, 4);
         assert_eq!(res.score, 3 * 2 - 1);
+        assert_eq!(res.nm, 1);
     }
 
     #[test]
@@ -482,5 +588,13 @@ mod tests {
         assert_eq!(res.ref_start, 0);
         assert_eq!(res.ref_end, 4);
         assert_eq!(res.cigar, "2M1I2M");
+        assert_eq!(res.nm, 1);
+    }
+
+    #[test]
+    fn mapq_simple_model() {
+        assert_eq!(compute_mapq(50, 0), 60);
+        assert_eq!(compute_mapq(50, 25), 30);
+        assert_eq!(compute_mapq(10, 10), 0);
     }
 }
