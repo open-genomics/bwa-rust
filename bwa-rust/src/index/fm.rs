@@ -2,7 +2,14 @@ use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 
 const FM_MAGIC: u64 = 0x424D_4146_4D5F5253; // "BWAFM_RS"
-const FM_VERSION: u32 = 1;
+const FM_VERSION: u32 = 2;
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+pub struct IndexMeta {
+    pub reference_file: Option<String>,
+    pub build_args: Option<String>,
+    pub build_timestamp: Option<String>,
+}
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Contig {
@@ -27,12 +34,16 @@ pub struct FMIndex {
     pub bwt: Vec<u8>,
     /// Occ 采样（按块存储，行优先展平）：occ_samples[block_id * sigma + c]
     pub occ_samples: Vec<u32>,
-    /// 完整 SA（MVP，可换稀疏）
+    /// SA（完整或稀疏采样）
     pub sa: Vec<u32>,
+    /// 稀疏 SA 采样间隔（0 表示完整 SA）
+    pub sa_sample_rate: u32,
     /// contig 元信息（名称、长度、起始偏移）
     pub contigs: Vec<Contig>,
     /// 原始文本（数值化字母表，包含 contig 间的 0 分隔符）
     pub text: Vec<u8>,
+    /// 可选的构建元数据
+    pub meta: Option<IndexMeta>,
 }
 
 impl FMIndex {
@@ -71,7 +82,49 @@ impl FMIndex {
             }
         }
 
-        Self { magic: FM_MAGIC, version: FM_VERSION, sigma, block: block_u, c, bwt, occ_samples, sa, contigs, text }
+        Self { magic: FM_MAGIC, version: FM_VERSION, sigma, block: block_u, c, bwt, occ_samples, sa, sa_sample_rate: 0, contigs, text, meta: None }
+    }
+
+    /// 构建使用稀疏 SA 采样的 FM 索引
+    pub fn build_sparse(text: Vec<u8>, bwt: Vec<u8>, sa: Vec<u32>, contigs: Vec<Contig>, sigma: u8, block: usize, sa_rate: u32) -> Self {
+        let mut fm = Self::build(text, bwt, sa, contigs, sigma, block);
+        if sa_rate > 1 {
+            fm.sparsify_sa(sa_rate);
+        }
+        fm
+    }
+
+    /// 将完整 SA 转换为稀疏采样
+    fn sparsify_sa(&mut self, rate: u32) {
+        let n = self.sa.len();
+        let mut sparse = Vec::with_capacity(n / rate as usize + 1);
+        for i in (0..n).step_by(rate as usize) {
+            sparse.push(self.sa[i]);
+        }
+        self.sa = sparse;
+        self.sa_sample_rate = rate;
+    }
+
+    /// 通过 LF-mapping 从稀疏 SA 恢复任意位置的 SA 值
+    pub fn sa_value(&self, mut idx: usize) -> u32 {
+        if self.sa_sample_rate <= 1 {
+            return self.sa[idx];
+        }
+        let rate = self.sa_sample_rate as usize;
+        let mut steps = 0u32;
+        loop {
+            if idx % rate == 0 {
+                return self.sa[idx / rate] + steps;
+            }
+            // LF-mapping: idx = C[BWT[idx]] + Occ(BWT[idx], idx)
+            let ch = self.bwt[idx];
+            idx = self.c[ch as usize] as usize + self.occ(ch, idx) as usize;
+            steps += 1;
+        }
+    }
+
+    pub fn set_meta(&mut self, meta: IndexMeta) {
+        self.meta = Some(meta);
     }
 
     #[inline]
@@ -128,9 +181,9 @@ impl FMIndex {
                 idx.magic
             ));
         }
-        if idx.version != FM_VERSION {
+        if idx.version != FM_VERSION && idx.version != 1 {
             return Err(anyhow!(
-                "unsupported FM index version: expected {}, got {}",
+                "unsupported FM index version: expected {} (or 1), got {}",
                 FM_VERSION,
                 idx.version
             ));
@@ -138,9 +191,13 @@ impl FMIndex {
         Ok(idx)
     }
 
-    /// 取出 SA 区间对应的文本位置（MVP：直接从完整 SA 返回）。
-    pub fn sa_interval_positions(&self, l: usize, r: usize) -> &[u32] {
-        &self.sa[l..r]
+    /// 取出 SA 区间对应的文本位置
+    pub fn sa_interval_positions(&self, l: usize, r: usize) -> Vec<u32> {
+        if self.sa_sample_rate <= 1 {
+            self.sa[l..r].to_vec()
+        } else {
+            (l..r).map(|i| self.sa_value(i)).collect()
+        }
     }
 
     /// 将文本位置映射到 (contig_index, contig_offset)。若落在分隔符($)位置，则返回 None。

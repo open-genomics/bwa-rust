@@ -45,6 +45,8 @@ enum Commands {
         band_width: usize,
         #[arg(long = "score-threshold", default_value_t = 20)]
         score_threshold: i32,
+        #[arg(short = 't', long = "threads", default_value_t = 1)]
+        threads: usize,
     },
 }
 
@@ -62,6 +64,7 @@ fn main() -> Result<()> {
             gap_extend,
             band_width,
             score_threshold,
+            threads,
         } => {
             let opt = align::AlignOpt {
                 match_score,
@@ -70,6 +73,7 @@ fn main() -> Result<()> {
                 gap_extend,
                 band_width,
                 score_threshold,
+                threads,
             };
             run_align(&index, &reads, out.as_deref(), opt)
         }
@@ -115,7 +119,12 @@ fn run_index(reference: &str, output: &str) -> Result<()> {
     // Build SA -> BWT -> FM
     let sa = index::sa::build_sa(&text);
     let bwt = index::bwt::build_bwt(&text, &sa);
-    let fm = index::fm::FMIndex::build(text, bwt, sa, contigs, util::dna::SIGMA as u8, 512);
+    let mut fm = index::fm::FMIndex::build(text, bwt, sa, contigs, util::dna::SIGMA as u8, 512);
+    fm.set_meta(index::fm::IndexMeta {
+        reference_file: Some(reference.to_string()),
+        build_args: Some(std::env::args().collect::<Vec<_>>().join(" ")),
+        build_timestamp: Some(chrono::Utc::now().to_rfc3339()),
+    });
 
     let out_path = format!("{}.fm", output);
     fm.save_to_file(&out_path)
