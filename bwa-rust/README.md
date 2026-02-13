@@ -1,5 +1,9 @@
 # bwa-rust
 
+[![CI](https://github.com/LessUp/bwa-rust/actions/workflows/ci.yml/badge.svg)](https://github.com/LessUp/bwa-rust/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Rust](https://img.shields.io/badge/rust-1.70%2B-orange.svg)](https://www.rust-lang.org/)
+
 受 [BWA](https://github.com/lh3/bwa) 启发的 Rust 版序列比对器。本项目在整体结构和算法思想上接近 BWA/BWA-MEM，但**不追求与 C 版 BWA 100% 行为兼容**（命令行选项、索引格式、MAPQ 细节等允许不同）。
 
 ## 已实现功能
@@ -103,6 +107,31 @@ cargo bench
 cargo run --example simple_align
 ```
 
+## 安装
+
+### 从源码构建
+
+```bash
+git clone https://github.com/LessUp/bwa-rust.git
+cd bwa-rust/bwa-rust
+cargo build --release
+```
+
+编译后的二进制文件位于 `target/release/bwa-rust`。
+
+### 系统要求
+
+- **Rust** 1.70 或更高版本
+- 支持 Linux、macOS、Windows
+
 ## 规划
 
 详见 [ROADMAP.md](../ROADMAP.md)。
+
+## 贡献
+
+欢迎贡献！请阅读 [CONTRIBUTING.md](CONTRIBUTING.md) 了解详情。
+
+## 许可证
+
+本项目采用 [MIT 许可证](LICENSE) 发布。

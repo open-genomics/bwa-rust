@@ -1,10 +1,10 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 
-mod io;
-mod index;
-mod util;
-mod align;
+use bwa_rust::io;
+use bwa_rust::index;
+use bwa_rust::util;
+use bwa_rust::align;
 
 #[derive(Parser, Debug)]
 #[command(name = "bwa-rust", author, version, about = "Rust implementation inspired by BWA", arg_required_else_help = true)]

@@ -59,8 +59,8 @@ pub fn find_smem_seeds(
         let mut best_r = 0usize;
 
         // 逐步增加长度，使用 backward_search
-        let mut l = 0usize;
-        let mut r = fm.bwt.len();
+        let _l = 0usize;
+        let _r = fm.bwt.len();
         // 从 qb+len-1 向 qb 逆向扩展（backward search 的自然方向）
         // 但我们需要按正序查找子串 query[qb..qb+len]
         // backward_search 已经内部反转，所以直接调用即可
