@@ -1,5 +1,9 @@
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
+
+const FM_MAGIC: u64 = 0x424D_4146_4D5F5253; // "BWAFM_RS"
+const FM_VERSION: u32 = 1;
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Contig {
     pub name: String,
@@ -13,6 +17,8 @@ pub struct Contig {
 /// - 保存完整 SA（MVP），方便从区间获得位置；后续可替换为稀疏采样。
 #[derive(Debug, Serialize, Deserialize)]
 pub struct FMIndex {
+    pub magic: u64,
+    pub version: u32,
     pub sigma: u8,
     pub block: u32,
     /// C[i] = 文本中字母 < i 的累计数量
@@ -65,7 +71,7 @@ impl FMIndex {
             }
         }
 
-        Self { sigma, block: block_u, c, bwt, occ_samples, sa, contigs, text }
+        Self { magic: FM_MAGIC, version: FM_VERSION, sigma, block: block_u, c, bwt, occ_samples, sa, contigs, text }
     }
 
     #[inline]
@@ -115,6 +121,20 @@ impl FMIndex {
     pub fn load_from_file(path: &str) -> Result<Self> {
         let f = std::fs::File::open(path)?;
         let idx: Self = bincode::deserialize_from(f)?;
+        if idx.magic != FM_MAGIC {
+            return Err(anyhow!(
+                "invalid FM index file: bad magic number (expected 0x{:016X}, got 0x{:016X})",
+                FM_MAGIC,
+                idx.magic
+            ));
+        }
+        if idx.version != FM_VERSION {
+            return Err(anyhow!(
+                "unsupported FM index version: expected {}, got {}",
+                FM_VERSION,
+                idx.version
+            ));
+        }
         Ok(idx)
     }
 
@@ -140,5 +160,120 @@ impl FMIndex {
             }
         }
         None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::index::{bwt, sa};
+
+    fn build_toy_fm(text_bytes: &[u8]) -> FMIndex {
+        let mut text: Vec<u8> = text_bytes.to_vec();
+        let len = text.len() as u32;
+        let contigs = vec![Contig {
+            name: "seq1".to_string(),
+            len,
+            offset: 0,
+        }];
+        text.push(0); // sentinel
+        let sa_arr = sa::build_sa(&text);
+        let bwt_arr = bwt::build_bwt(&text, &sa_arr);
+        FMIndex::build(text, bwt_arr, sa_arr, contigs, 6, 4)
+    }
+
+    #[test]
+    fn fm_build_basic_fields() {
+        let fm = build_toy_fm(&[1, 2, 3, 4]); // ACGT
+        assert_eq!(fm.magic, FM_MAGIC);
+        assert_eq!(fm.version, FM_VERSION);
+        assert_eq!(fm.sigma, 6);
+        assert_eq!(fm.contigs.len(), 1);
+        assert_eq!(fm.contigs[0].name, "seq1");
+        assert_eq!(fm.contigs[0].len, 4);
+        assert_eq!(fm.sa.len(), 5); // text len = 5 (ACGT$)
+    }
+
+    #[test]
+    fn fm_backward_search_finds_pattern() {
+        let fm = build_toy_fm(&[1, 2, 3, 4, 1, 2]); // ACGTAC
+        // search for "AC" = [1,2]
+        let res = fm.backward_search(&[1, 2]);
+        assert!(res.is_some());
+        let (l, r) = res.unwrap();
+        assert!(r > l);
+        assert_eq!(r - l, 2); // "AC" appears twice
+    }
+
+    #[test]
+    fn fm_backward_search_not_found() {
+        let fm = build_toy_fm(&[1, 2, 3, 4]); // ACGT
+        // search for "TT" = [4,4] — should not exist
+        let res = fm.backward_search(&[4, 4]);
+        assert!(res.is_none());
+    }
+
+    #[test]
+    fn fm_save_load_roundtrip() {
+        let fm = build_toy_fm(&[1, 2, 3, 4, 1, 2, 3]);
+        let tmp = std::env::temp_dir().join("bwa_rust_test_fm_roundtrip.fm");
+        let path = tmp.to_str().unwrap();
+        fm.save_to_file(path).unwrap();
+        let loaded = FMIndex::load_from_file(path).unwrap();
+        assert_eq!(loaded.magic, fm.magic);
+        assert_eq!(loaded.version, fm.version);
+        assert_eq!(loaded.sigma, fm.sigma);
+        assert_eq!(loaded.block, fm.block);
+        assert_eq!(loaded.c, fm.c);
+        assert_eq!(loaded.bwt, fm.bwt);
+        assert_eq!(loaded.sa, fm.sa);
+        assert_eq!(loaded.text, fm.text);
+        assert_eq!(loaded.contigs.len(), fm.contigs.len());
+        assert_eq!(loaded.contigs[0].name, fm.contigs[0].name);
+        assert_eq!(loaded.contigs[0].len, fm.contigs[0].len);
+        assert_eq!(loaded.contigs[0].offset, fm.contigs[0].offset);
+        std::fs::remove_file(path).ok();
+    }
+
+    #[test]
+    fn fm_map_text_pos_basic() {
+        // Two contigs: [0..3) and [4..7), separator at pos 3
+        let text = vec![1u8, 2, 3, 0, 1, 3, 4, 0];
+        let contigs = vec![
+            Contig { name: "c1".to_string(), len: 3, offset: 0 },
+            Contig { name: "c2".to_string(), len: 3, offset: 4 },
+        ];
+        let sa_arr = sa::build_sa(&text);
+        let bwt_arr = bwt::build_bwt(&text, &sa_arr);
+        let fm = FMIndex::build(text, bwt_arr, sa_arr, contigs, 6, 4);
+
+        assert_eq!(fm.map_text_pos(0), Some((0, 0)));
+        assert_eq!(fm.map_text_pos(2), Some((0, 2)));
+        assert_eq!(fm.map_text_pos(3), None); // separator
+        assert_eq!(fm.map_text_pos(4), Some((1, 0)));
+        assert_eq!(fm.map_text_pos(6), Some((1, 2)));
+        assert_eq!(fm.map_text_pos(7), None); // separator
+        assert_eq!(fm.map_text_pos(100), None);
+    }
+
+    #[test]
+    fn fm_occ_correctness() {
+        let fm = build_toy_fm(&[1, 2, 1, 2, 3]); // ACACG$
+        // Verify occ counts are consistent: occ(c, n) should equal total frequency of c in BWT
+        let n = fm.bwt.len();
+        for c in 0..fm.sigma {
+            let total = fm.occ(c, n);
+            let manual: u32 = fm.bwt.iter().filter(|&&b| b == c).count() as u32;
+            assert_eq!(total, manual, "occ mismatch for c={}", c);
+        }
+    }
+
+    #[test]
+    fn fm_sa_interval_positions_returns_all() {
+        let fm = build_toy_fm(&[1, 2, 3, 1, 2, 3]); // ACGACG
+        // "ACG" appears twice
+        let res = fm.backward_search(&[1, 2, 3]).unwrap();
+        let positions = fm.sa_interval_positions(res.0, res.1);
+        assert_eq!(positions.len(), 2);
     }
 }

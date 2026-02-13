@@ -109,4 +109,46 @@ mod tests {
         let back = revcomp(&rc);
         assert_eq!(back, seq);
     }
+
+    #[test]
+    fn revcomp_roundtrip_various() {
+        let seqs: &[&[u8]] = &[
+            b"A", b"AAAA", b"ACGTACGT", b"NNNN", b"TGCA",
+            b"ACGTNNNNACGT",
+        ];
+        for &s in seqs {
+            let norm = normalize_seq(s);
+            let rc = revcomp(&norm);
+            let back = revcomp(&rc);
+            assert_eq!(back, norm, "revcomp roundtrip failed for {:?}", std::str::from_utf8(s));
+        }
+    }
+
+    #[test]
+    fn normalize_seq_maps_unknown_to_n() {
+        let input = b"AcRYSWKMBDHV.";
+        let out = normalize_seq(input);
+        // A, c->C, rest are non-ACGTN -> N
+        assert_eq!(out[0], b'A');
+        assert_eq!(out[1], b'C');
+        for &b in &out[2..] {
+            assert_eq!(b, b'N');
+        }
+    }
+
+    #[test]
+    fn to_from_alphabet_complete_mapping() {
+        // Verify the full mapping table
+        assert_eq!(to_alphabet(b'$'), 5); // unknown -> N
+        assert_eq!(from_alphabet(0), 0);  // sentinel
+        for code in 0..=5u8 {
+            let base = from_alphabet(code);
+            if code == 0 {
+                assert_eq!(base, 0);
+            } else {
+                let back = to_alphabet(base);
+                assert_eq!(back, code, "roundtrip failed for code={}", code);
+            }
+        }
+    }
 }

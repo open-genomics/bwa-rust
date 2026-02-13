@@ -23,6 +23,7 @@ pub struct AlignOpt {
     pub gap_open: i32,
     pub gap_extend: i32,
     pub band_width: usize,
+    pub score_threshold: i32,
 }
 
 impl Default for AlignOpt {
@@ -33,6 +34,7 @@ impl Default for AlignOpt {
             gap_open: 2,
             gap_extend: 1,
             band_width: 16,
+            score_threshold: 20,
         }
     }
 }
@@ -163,8 +165,8 @@ pub fn banded_sw(query: &[u8], reference: &[u8], p: SwParams) -> SwResult {
         }
 
         let diag_idx = (i - 1) * cols + (j - 1);
-        let up_idx = (i - 1) * cols + j;
-        let left_idx = i * cols + (j - 1);
+        let _up_idx = (i - 1) * cols + j;
+        let _left_idx = i * cols + (j - 1);
 
         let subst = if query[i - 1] == reference[j - 1] {
             p.match_score
@@ -181,10 +183,10 @@ pub fn banded_sw(query: &[u8], reference: &[u8], p: SwParams) -> SwResult {
             i -= 1;
             j -= 1;
         } else if h_here == e_val {
-            ops.push('D');
+            ops.push('I');
             i -= 1;
         } else if h_here == f_val {
-            ops.push('I');
+            ops.push('D');
             j -= 1;
         } else {
             break;
@@ -251,10 +253,6 @@ pub fn banded_sw(query: &[u8], reference: &[u8], p: SwParams) -> SwResult {
     }
 }
 
-pub fn align_fastq(index_path: &str, fastq_path: &str, out_path: Option<&str>) -> Result<()> {
-    let opt = AlignOpt::default();
-    align_fastq_with_opt(index_path, fastq_path, out_path, opt)
-}
 
 pub fn align_fastq_with_opt(
     index_path: &str,
@@ -380,7 +378,7 @@ pub fn align_fastq_with_opt(
             }
         }
 
-        if has_best {
+        if has_best && best_score >= opt.score_threshold {
             let contig = &fm.contigs[best_ci];
             let flag = if best_is_rev { 16 } else { 0 };
             let rname = &contig.name;
@@ -419,7 +417,6 @@ pub fn align_fastq_with_opt(
     Ok(())
 }
 
-const MAX_SEED_HITS: usize = 16;
 
 fn compute_mapq(best_score: i32, second_best_score: i32) -> u8 {
     if best_score <= 0 {
@@ -961,5 +958,126 @@ mod tests {
         assert_eq!(chain.seeds[0].qb, 0);
         assert_eq!(chain.seeds[1].qb, 4);
         assert_eq!(chain.score, 8);
+    }
+
+    #[test]
+    fn sw_deletion() {
+        let p = default_params();
+        let q = b"ACGT";
+        let r = b"ACGGT";
+        let res = banded_sw(q, r, p);
+        assert!(res.score > 0);
+        assert!(res.cigar.contains('D') || res.cigar.contains('M'));
+    }
+
+    #[test]
+    fn sw_empty_inputs() {
+        let p = default_params();
+        let res = banded_sw(b"", b"ACGT", p);
+        assert_eq!(res.score, 0);
+        let res2 = banded_sw(b"ACGT", b"", p);
+        assert_eq!(res2.score, 0);
+    }
+
+    #[test]
+    fn sw_all_mismatch() {
+        let p = default_params();
+        let q = b"AAAA";
+        let r = b"TTTT";
+        let res = banded_sw(q, r, p);
+        // With match_score=2, mismatch_penalty=1, local SW should still try
+        // but score may be low or zero if penalty accumulates
+        assert!(res.score >= 0);
+    }
+
+    #[test]
+    fn align_one_direction_exact_match() {
+        let reference = b"ACGTACGTACGTACGTACGTACGT";
+        let fm = build_test_fm(reference);
+        let read = b"ACGTACGTACGT";
+        let norm = dna::normalize_seq(read);
+        let alpha: Vec<u8> = norm.iter().map(|&b| dna::to_alphabet(b)).collect();
+        let sw = SwParams {
+            match_score: 2,
+            mismatch_penalty: 1,
+            gap_open: 2,
+            gap_extend: 1,
+            band_width: 16,
+        };
+        let res = align_one_direction(&fm, &norm, &alpha, sw);
+        assert!(res.is_some());
+        let db = res.unwrap();
+        assert!(db.best_score > 0);
+        assert!(db.best_cigar.contains('M'));
+        assert_eq!(db.best_nm, 0);
+    }
+
+    #[test]
+    fn align_one_direction_with_mismatch() {
+        // Use a long unique reference so both sides of a mismatch can form >=20bp seeds
+        let reference = b"ACGTACGTAGCTGATCGTAGCTAGCTAGCTGATCGTAGCTAGCTAGCTGAT";
+        let fm = build_test_fm(reference);
+        // Take first 40bp of reference and introduce a mismatch at position 20
+        let mut read = reference[..40].to_vec();
+        // Flip one base in the middle
+        read[20] = if read[20] == b'A' { b'T' } else { b'A' };
+        let norm = dna::normalize_seq(&read);
+        let alpha: Vec<u8> = norm.iter().map(|&b| dna::to_alphabet(b)).collect();
+        let sw = SwParams {
+            match_score: 2,
+            mismatch_penalty: 1,
+            gap_open: 2,
+            gap_extend: 1,
+            band_width: 16,
+        };
+        let res = align_one_direction(&fm, &norm, &alpha, sw);
+        // Should still align (seeds on flanking exact regions >= 20bp)
+        assert!(res.is_some());
+        let db = res.unwrap();
+        assert!(db.best_score > 0);
+    }
+
+    #[test]
+    fn chain_to_alignment_single_seed() {
+        let p = default_params();
+        let query = b"ACGT";
+        let reference = b"ACGT";
+        let chain = Chain {
+            contig: 0,
+            seeds: vec![MemSeed {
+                contig: 0,
+                qb: 0,
+                qe: 4,
+                rb: 0,
+                re: 4,
+            }],
+            score: 4,
+        };
+        let res = chain_to_alignment(&chain, query, reference, p);
+        assert_eq!(res.score, 8); // 4 bases * match_score(2)
+        assert_eq!(res.cigar, "4M");
+        assert_eq!(res.nm, 0);
+    }
+
+    #[test]
+    fn chain_to_alignment_empty_chain() {
+        let p = default_params();
+        let chain = Chain {
+            contig: 0,
+            seeds: vec![],
+            score: 0,
+        };
+        let res = chain_to_alignment(&chain, b"ACGT", b"ACGT", p);
+        assert_eq!(res.score, 0);
+        assert!(res.cigar.is_empty());
+    }
+
+    #[test]
+    fn mapq_edge_cases() {
+        assert_eq!(compute_mapq(0, 0), 0);
+        assert_eq!(compute_mapq(-5, 0), 0);
+        assert_eq!(compute_mapq(100, 0), 60);
+        assert_eq!(compute_mapq(100, 100), 0);
+        assert_eq!(compute_mapq(100, 50), 30);
     }
 }

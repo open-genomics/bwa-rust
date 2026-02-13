@@ -2,6 +2,7 @@ use anyhow::{anyhow, Result};
 use std::io::BufRead;
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct FastqRecord {
     pub id: String,
     pub desc: Option<String>,
@@ -50,7 +51,7 @@ impl<R: BufRead> FastqReader<R> {
         self.buf.clear();
         n = self.reader.read_line(&mut self.buf)?;
         if n == 0 { return Err(anyhow!("missing quality line")); }
-        let mut qual = self.buf.trim_end().as_bytes().to_vec();
+        let qual = self.buf.trim_end().as_bytes().to_vec();
 
         // If quality length is shorter than seq (line-wrapped seq not supported here), error
         if qual.len() != seq.len() { return Err(anyhow!("seq/qual length mismatch")); }

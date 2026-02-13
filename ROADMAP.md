@@ -22,10 +22,10 @@
     - [ ] 明确说明：本项目是“受 BWA 启发的 Rust 实现”，**不追求与 C 版 BWA 完全兼容**。
     - [ ] 描述当前已实现的功能（index + 精确匹配 align）。
 
-- [ ] 准备测试/参考数据集
-  - [ ] 在仓库中创建 `data/` 目录（或其它你喜欢的路径），加入：
-    - [ ] 小型参考序列 `toy.fa`（例如几个小 contig，总长度几万 bp）。
-    - [ ] 对应的 reads FASTQ，如 `toy_reads.fq`（覆盖匹配、错配、indel 等情况）。
+- [x] 准备测试/参考数据集
+  - [x] 在仓库中创建 `data/` 目录（或其它你喜欢的路径），加入：
+    - [x] 小型参考序列 `toy.fa`（例如几个小 contig，总长度几万 bp）。
+    - [x] 对应的 reads FASTQ，如 `toy_reads.fq`（覆盖匹配、错配、indel 等情况）。
   - [ ] 使用 C 版 BWA 生成基准结果（可手工在 README 或单独文档中记录命令）：
     - [ ] `bwa index toy.fa`
     - [ ] `bwa mem toy.fa toy_reads.fq > toy_bwa_mem.sam`
@@ -45,50 +45,50 @@
 
 ### 1.1 FASTA 读取与 DNA 编码的健壮性
 
-- [ ] 为 `io::fasta::FastaReader` 增强测试用例
-  - [ ] 多 contig FASTA（带/不带描述行），验证 `id`、`desc`、`seq` 是否正确。
-  - [ ] 不同换行符（\n/\r\n）情况。
-  - [ ] 中间穿插空行或非标准字符时的行为（是否被正确过滤或转换）。
+- [x] 为 `io::fasta::FastaReader` 增强测试用例
+  - [x] 多 contig FASTA（带/不带描述行），验证 `id`、`desc`、`seq` 是否正确。
+  - [x] 不同换行符（\n/\r\n）情况。
+  - [x] 中间穿插空行或非标准字符时的行为（是否被正确过滤或转换）。
 
-- [ ] 为 `util::dna` 模块增加单元测试
-  - [ ] `normalize_seq`：
-    - [ ] A/C/G/T/U/N 的归一化逻辑正确；
-    - [ ] 其它字符被映射为 N。
-  - [ ] `to_alphabet` / `from_alphabet`：
-    - [ ] 测试 round-trip：`from_alphabet(to_alphabet(base))` 结果合理；
-    - [ ] 覆盖 `{0:$, 1:A, 2:C, 3:G, 4:T, 5:N}` 的映射关系。
-  - [ ] `revcomp`：
-    - [ ] 测试 `revcomp(revcomp(seq)) == seq`（对只含 A/C/G/T/N 的序列）。
+- [x] 为 `util::dna` 模块增加单元测试
+  - [x] `normalize_seq`：
+    - [x] A/C/G/T/U/N 的归一化逻辑正确；
+    - [x] 其它字符被映射为 N。
+  - [x] `to_alphabet` / `from_alphabet`：
+    - [x] 测试 round-trip：`from_alphabet(to_alphabet(base))` 结果合理；
+    - [x] 覆盖 `{0:$, 1:A, 2:C, 3:G, 4:T, 5:N}` 的映射关系。
+  - [x] `revcomp`：
+    - [x] 测试 `revcomp(revcomp(seq)) == seq`（对只含 A/C/G/T/N 的序列）。
 
 ### 1.2 FMIndex 结构与序列化设计
 
-- [ ] 明确定义 FM 索引的文件格式
-  - [ ] 在 `index::fm::FMIndex` 中新增：
-    - [ ] 索引版本或 magic 字段，用于未来格式升级时做兼容性检查。
+- [x] 明确定义 FM 索引的文件格式
+  - [x] 在 `index::fm::FMIndex` 中新增：
+    - [x] 索引版本或 magic 字段，用于未来格式升级时做兼容性检查。
     - [ ] 可选的元数据结构（如构建时参考文件名、命令行参数、构建时间戳等）。
-  - [ ] 在 `README.md` 或 `docs/` 中简单记录 `.fm` 文件格式（高层说明即可）。
+  - [x] 在 `README.md` 或 `docs/` 中简单记录 `.fm` 文件格式（高层说明即可）。
 
-- [ ] 为 `FMIndex::build/save_to_file/load_from_file` 添加测试
-  - [ ] 使用小型 toy 文本：
-    - [ ] 构建 FM 索引；
-    - [ ] 序列化到文件；
-    - [ ] 再从文件加载，验证关键字段是否一致（`sigma/block/c/bwt/sa/contigs`）。
+- [x] 为 `FMIndex::build/save_to_file/load_from_file` 添加测试
+  - [x] 使用小型 toy 文本：
+    - [x] 构建 FM 索引；
+    - [x] 序列化到文件；
+    - [x] 再从文件加载，验证关键字段是否一致（`sigma/block/c/bwt/sa/contigs`）。
 
 ### 1.3 后缀数组（SA）与 BWT 的正确性
 
-- [ ] 为 `index::sa::build_sa` 增强测试
-  - [ ] 针对少量人工构造的文本验证输出顺序（已存在的基本测试可拓展）。
-  - [ ] 在测试环境下实现一个朴素 O(n² log n) SA 构造，用它来验证当前倍增算法对随机文本的正确性。
+- [x] 为 `index::sa::build_sa` 增强测试
+  - [x] 针对少量人工构造的文本验证输出顺序（已存在的基本测试可拓展）。
+  - [x] 在测试环境下实现一个朴素 O(n² log n) SA 构造，用它来验证当前倍增算法对随机文本的正确性。
 
-- [ ] 为 `index::bwt::build_bwt` 增强测试
-  - [ ] 验证单 contig 文本生成的 BWT 是否符合预期；
-  - [ ] 验证包含多个 `$` 分隔符（多 contig）的文本也能正确构建 BWT。
+- [x] 为 `index::bwt::build_bwt` 增强测试
+  - [x] 验证单 contig 文本生成的 BWT 是否符合预期；
+  - [x] 验证包含多个 `$` 分隔符（多 contig）的文本也能正确构建 BWT。
 
 ### 1.4 CLI 与错误处理
 
-- [ ] 改进 `run_index` 的健壮性
-  - [ ] 当输入 FASTA 为空或非常短时，给出明确错误或警告。
-  - [ ] 当输出路径不可写时，返回清晰的错误信息（anyhow 上报）。
+- [x] 改进 `run_index` 的健壮性
+  - [x] 当输入 FASTA 为空或非常短时，给出明确错误或警告。
+  - [x] 当输出路径不可写时，返回清晰的错误信息（anyhow 上报）。
 
 - [ ] 文档
   - [ ] 在 `bwa-rust/README.md` 中增加一个“索引构建与索引格式简介”小节。
@@ -106,7 +106,7 @@
     - [x] `match_score`、`mismatch_penalty`；
     - [x] `gap_open`、`gap_extend`；
     - [x] `band_width`（带状 SW 的带宽）；
-    - [ ] `max_mismatch` 或 `score_threshold` 等简化配置。
+    - [x] `max_mismatch` 或 `score_threshold` 等简化配置。
 
 - [x] 将 CLI 与 `AlignOpt` 关联
   - [x] 在 `Commands::Align` 中增加可选参数：
@@ -117,9 +117,9 @@
 
 ### 2.2 从精确匹配扩展到“种子 + 简单局部 SW”
 
-- [ ] FM 索引中增加位置获取能力
-  - [ ] 在 `FMIndex` 中新增方法：
-    - [ ] 从 `[l, r)` 区间返回**所有** SA 位置（而不仅仅是第一个），用于生成多个候选位置。
+- [x] FM 索引中增加位置获取能力
+  - [x] 在 `FMIndex` 中新增方法：
+    - [x] 从 `[l, r)` 区间返回**所有** SA 位置（而不仅仅是第一个），用于生成多个候选位置。
 
 - [ ] 在 `align` 模块中实现“种子 + 局部 DP”流程（简化版）
   - [ ] 设计简单的种子策略：
@@ -145,10 +145,10 @@
       - [ ] NM Tag（可选，使用 edit distance）。
   - [ ] 若所有候选得分都低于阈值，则按 unmapped 输出（保留现有 FLAG 4 行）。
 
-- [ ] 为增强后的 MVP 写测试
-  - [ ] 人工构造小参考和读段，验证：
-    - [ ] 有简单错配/插入/缺失时，是否能找到合理对齐；
-    - [ ] CIGAR 与 POS 是否符合预期。
+- [x] 为增强后的 MVP 写测试
+  - [x] 人工构造小参考和读段，验证：
+    - [x] 有简单错配/插入/缺失时，是否能找到合理对齐；
+    - [x] CIGAR 与 POS 是否符合预期。
 
 ---
 

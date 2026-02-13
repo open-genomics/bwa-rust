@@ -43,6 +43,8 @@ enum Commands {
         gap_extend: i32,
         #[arg(long = "band-width", default_value_t = 16)]
         band_width: usize,
+        #[arg(long = "score-threshold", default_value_t = 20)]
+        score_threshold: i32,
     },
 }
 
@@ -59,6 +61,7 @@ fn main() -> Result<()> {
             gap_open,
             gap_extend,
             band_width,
+            score_threshold,
         } => {
             let opt = align::AlignOpt {
                 match_score,
@@ -66,6 +69,7 @@ fn main() -> Result<()> {
                 gap_open,
                 gap_extend,
                 band_width,
+                score_threshold,
             };
             run_align(&index, &reads, out.as_deref(), opt)
         }
@@ -73,7 +77,8 @@ fn main() -> Result<()> {
 }
 
 fn run_index(reference: &str, output: &str) -> Result<()> {
-    let fh = std::fs::File::open(reference)?;
+    let fh = std::fs::File::open(reference)
+        .map_err(|e| anyhow::anyhow!("cannot open reference FASTA '{}': {}", reference, e))?;
     let buf = std::io::BufReader::new(fh);
     let mut reader = io::fasta::FastaReader::new(buf);
 
@@ -96,6 +101,13 @@ fn run_index(reference: &str, output: &str) -> Result<()> {
         text.push(0);
     }
 
+    if n_seqs == 0 {
+        anyhow::bail!("FASTA file '{}' contains no sequences", reference);
+    }
+    if total_len == 0 {
+        anyhow::bail!("FASTA file '{}' contains only empty sequences", reference);
+    }
+
     println!("reference: {}", reference);
     println!("sequences: {}", n_seqs);
     println!("total_len: {}", total_len);
@@ -106,7 +118,8 @@ fn run_index(reference: &str, output: &str) -> Result<()> {
     let fm = index::fm::FMIndex::build(text, bwt, sa, contigs, util::dna::SIGMA as u8, 512);
 
     let out_path = format!("{}.fm", output);
-    fm.save_to_file(&out_path)?;
+    fm.save_to_file(&out_path)
+        .map_err(|e| anyhow::anyhow!("cannot write index to '{}': {}", out_path, e))?;
     println!("FM index saved: {}", out_path);
     Ok(())
 }
