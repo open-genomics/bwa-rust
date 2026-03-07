@@ -48,23 +48,4 @@ too_many_arguments = "allow"
 module_name_repetitions = "allow"
 
 # ── Profile 优化 ──────────────────────────────────────
-
-[profile.dev]
-opt-level = 0
-debug = true
-incremental = true
-
-[profile.release]
-opt-level = 3
-lto = "fat"
-codegen-units = 1
-strip = "symbols"
-panic = "abort"
-
-[profile.bench]
-inherits = "release"
-debug = true
-
-[profile.test]
-opt-level = 1
-debug = true
+# 注意: Profile 配置已移至工作区根 Cargo.toml

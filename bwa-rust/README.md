@@ -109,11 +109,11 @@ src/
 
 ## 测试用例报告
 
-全部 **130** 个测试通过（118 单元测试 + 11 集成测试 + 1 文档测试），0 失败。
+全部 **133** 个测试通过（121 单元测试 + 11 集成测试 + 1 文档测试），0 失败。
 
 ```bash
 cargo test
-# test result: ok. 130 passed; 0 failed; 0 ignored
+# test result: ok. 133 passed; 0 failed; 0 ignored
 ```
 
 ### 单元测试（118 个）

@@ -1,3 +1,25 @@
 [workspace]
 members = ["bwa-rust"]
 resolver = "2"
+
+# ── Profile 优化 ──────────────────────────────────────
+
+[profile.dev]
+opt-level = 0
+debug = true
+incremental = true
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+strip = "symbols"
+panic = "abort"
+
+[profile.bench]
+inherits = "release"
+debug = true
+
+[profile.test]
+opt-level = 1
+debug = true

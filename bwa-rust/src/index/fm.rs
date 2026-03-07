@@ -28,7 +28,7 @@ pub struct FMIndex {
     pub version: u32,
     pub sigma: u8,
     pub block: u32,
-    /// C[i] = 文本中字母 < i 的累计数量
+    /// C\[i\] = 文本中字母 < i 的累计数量
     pub c: Vec<u32>,
     /// BWT 序列（与 SA 同长度）
     pub bwt: Vec<u8>,
