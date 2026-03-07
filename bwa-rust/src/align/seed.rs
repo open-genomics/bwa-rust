@@ -1,6 +1,9 @@
 use crate::index::fm::FMIndex;
 
-/// 对齐区域结构，类似 BWA 的 mem_alnreg_t
+/// 对齐区域结构，类似 BWA 的 mem_alnreg_t。
+///
+/// 当前版本（v0.1.0）的 pipeline 使用 `candidate::AlignCandidate` 作为内部候选表示。
+/// `AlnReg` 保留为公开 API 类型，供未来配对端（PE）对齐和库模式调用使用。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AlnReg {
     /// read 上的区间 [qb, qe)

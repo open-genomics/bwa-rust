@@ -70,9 +70,14 @@ SMEM（Super-Maximal Exact Match）是 BWA-MEM 的核心概念。对于 read 上
 
 ```rust
 use bwa_rust::align::find_smem_seeds;
+use bwa_rust::util::dna;
 
-let read_alpha: Vec<u8> = /* 编码后的 read */;
-let seeds = find_smem_seeds(&fm_idx, &read_alpha, 10); // min_len=10
+// 将 read 编码为字母表格式
+let read = b"ACGTACGT";
+let read_alpha: Vec<u8> = dna::normalize_seq(read)
+    .iter().map(|&b| dna::to_alphabet(b)).collect();
+
+let seeds = find_smem_seeds(&fm_idx, &read_alpha, 5); // min_len=5
 
 for seed in &seeds {
     println!("read[{}..{}] 匹配 ref[{}..{}]",
@@ -115,6 +120,35 @@ println!("Score: {}, CIGAR: {}, NM: {}", result.score, result.cigar, result.nm);
 ## 第六步：SAM 输出
 
 最终将比对结果格式化为 SAM 行，包含 FLAG、RNAME、POS、MAPQ、CIGAR 等字段，以及 AS/XS/NM 可选标签。
+
+```rust
+use bwa_rust::io::sam;
+
+// 写入 SAM header
+let contigs = vec![("chr1", 1000u32), ("chr2", 2000u32)];
+let mut out = Vec::new();
+sam::write_header(&mut out, &contigs).unwrap();
+
+// 生成 mapped 记录（FLAG=0 正向，FLAG=16 反向互补）
+let line = sam::format_record(
+    "read1",   // QNAME
+    0,         // FLAG
+    "chr1",    // RNAME
+    100,       // POS (1-based)
+    60,        // MAPQ
+    "50M",     // CIGAR
+    "ACGT...", // SEQ
+    "IIII...", // QUAL
+    100,       // AS (alignment score)
+    0,         // XS (suboptimal score)
+    2,         // NM (edit distance)
+);
+println!("{}", line);
+
+// 生成 unmapped 记录（FLAG=4）
+let unmapped = sam::format_unmapped("read2", "NNNN", "!!!!");
+println!("{}", unmapped);
+```
 
 ## 完整示例
 

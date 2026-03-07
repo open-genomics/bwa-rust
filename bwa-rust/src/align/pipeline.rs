@@ -9,9 +9,10 @@ use crate::io::fastq::{FastqReader, FastqRecord};
 use crate::io::sam;
 use crate::util::dna;
 
-use super::{AlignOpt, SwParams, chain_to_alignment_buf};
-use super::{build_chains, filter_chains, find_smem_seeds};
-use super::sw;
+use super::AlignOpt;
+use super::SwParams;
+use super::candidate::{AlignCandidate, collect_candidates, dedup_candidates};
+use super::mapq::compute_mapq;
 
 pub fn align_fastq_with_opt(
     index_path: &str,
@@ -201,130 +202,6 @@ pub(crate) fn align_single_read(
     sam_lines
 }
 
-#[derive(Debug, Clone)]
-pub(crate) struct AlignCandidate {
-    pub score: i32,
-    pub is_rev: bool,
-    pub rname: String,
-    pub pos1: u32,
-    pub cigar: String,
-    pub nm: u32,
-    pub contig_idx: usize,
-}
-
-pub(crate) fn collect_candidates(
-    fm: &FMIndex,
-    query_norm: &[u8],
-    query_alpha: &[u8],
-    sw_params: SwParams,
-    is_rev: bool,
-    opt: &AlignOpt,
-    candidates: &mut Vec<AlignCandidate>,
-) {
-    let len = query_alpha.len();
-    if len == 0 {
-        return;
-    }
-
-    // BWA 风格：min_seed_len 默认 19，但不超过 read 长度的一半
-    let min_mem_len = opt.min_seed_len.min(len / 2 + 1).max(1);
-    let seeds = find_smem_seeds(fm, query_alpha, min_mem_len);
-    if seeds.is_empty() {
-        return;
-    }
-
-    // 构建多条链
-    let mut chains = build_chains(&seeds, len);
-    filter_chains(&mut chains, 0.3);
-
-    let mut sw_buf = sw::SwBuffer::new();
-
-    for ch in &chains {
-        let ci = ch.contig;
-        let contig = &fm.contigs[ci];
-        let offset = contig.offset as usize;
-        let contig_len = contig.len as usize;
-        if contig_len == 0 {
-            continue;
-        }
-
-        let mut ref_seq: Vec<u8> = Vec::with_capacity(contig_len);
-        for &code in &fm.text[offset..offset + contig_len] {
-            ref_seq.push(dna::from_alphabet(code));
-        }
-        if ref_seq.is_empty() {
-            continue;
-        }
-
-        let res = chain_to_alignment_buf(ch, query_norm, &ref_seq, sw_params, &mut sw_buf);
-        if res.score <= 0 || res.cigar.is_empty() {
-            continue;
-        }
-
-        candidates.push(AlignCandidate {
-            score: res.score,
-            is_rev,
-            rname: contig.name.clone(),
-            pos1: (res.ref_start as u32) + 1,
-            cigar: res.cigar,
-            nm: res.nm,
-            contig_idx: ci,
-        });
-    }
-}
-
-pub(crate) fn dedup_candidates(candidates: &mut Vec<AlignCandidate>) {
-    let mut keep = vec![true; candidates.len()];
-    for i in 0..candidates.len() {
-        if !keep[i] {
-            continue;
-        }
-        for j in (i + 1)..candidates.len() {
-            if !keep[j] {
-                continue;
-            }
-            if candidates[i].contig_idx == candidates[j].contig_idx
-                && candidates[i].pos1 == candidates[j].pos1
-                && candidates[i].is_rev == candidates[j].is_rev
-            {
-                keep[j] = false;
-            }
-        }
-    }
-    let mut idx = 0;
-    candidates.retain(|_| {
-        let k = keep[idx];
-        idx += 1;
-        k
-    });
-}
-
-/// BWA 风格的 MAPQ 计算
-/// 参考 BWA mem_approx_mapq_se: mapq = MEM_MAPQ_COEF * (1 - sub/best) * ln(best)
-/// MEM_MAPQ_COEF = 30, MEM_MAPQ_MAX = 60
-fn compute_mapq(best_score: i32, second_best_score: i32) -> u8 {
-    const MAPQ_COEF: f64 = 30.0;
-    const MAPQ_MAX: u8 = 60;
-
-    if best_score <= 0 {
-        return 0;
-    }
-
-    let best = best_score as f64;
-
-    if second_best_score <= 0 {
-        // 唯一比对：q = coef * ln(best)，上限 MAPQ_MAX
-        let q = (MAPQ_COEF * best.ln()).round() as i32;
-        return (q.clamp(0, MAPQ_MAX as i32)) as u8;
-    }
-
-    let sub = second_best_score as f64;
-    let ratio = sub / best;
-    // q = coef * (1 - sub/best) * ln(best)
-    let q = (MAPQ_COEF * (1.0 - ratio) * best.ln()).round() as i32;
-    (q.clamp(0, MAPQ_MAX as i32)) as u8
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -334,16 +211,7 @@ mod tests {
     use crate::util::dna;
 
     fn default_opt() -> AlignOpt {
-        AlignOpt {
-            match_score: 2,
-            mismatch_penalty: 1,
-            gap_open: 2,
-            gap_extend: 1,
-            band_width: 16,
-            score_threshold: 20,
-            min_seed_len: 19,
-            threads: 1,
-        }
+        AlignOpt::default()
     }
 
     fn build_test_fm(seq: &[u8]) -> FMIndex {
@@ -362,67 +230,6 @@ mod tests {
         let sa_arr = sa::build_sa(&text);
         let bwt_arr = bwt::build_bwt(&text, &sa_arr);
         FMIndex::build(text, bwt_arr, sa_arr, contigs, dna::SIGMA as u8, 4)
-    }
-
-    #[test]
-    fn mapq_model() {
-        // 唯一比对：q = 30 * ln(best)，上限 60
-        assert!(compute_mapq(50, 0) > 50);
-        assert!(compute_mapq(100, 0) == 60);
-        // 有次优：q = 30 * (1 - sub/best) * ln(best)
-        assert!(compute_mapq(50, 25) > 0);
-        // 相同分数 -> 0
-        assert_eq!(compute_mapq(10, 10), 0);
-        assert_eq!(compute_mapq(100, 100), 0);
-        // 无效分数
-        assert_eq!(compute_mapq(0, 0), 0);
-        assert_eq!(compute_mapq(-5, 0), 0);
-        // 唯一比对且分数较高
-        assert!(compute_mapq(30, 0) > 30);
-    }
-
-    #[test]
-    fn collect_candidates_exact_match() {
-        let reference = b"ACGTACGTACGTACGTACGTACGT";
-        let fm = build_test_fm(reference);
-        let read = b"ACGTACGTACGT";
-        let norm = dna::normalize_seq(read);
-        let alpha: Vec<u8> = norm.iter().map(|&b| dna::to_alphabet(b)).collect();
-        let sw = SwParams {
-            match_score: 2,
-            mismatch_penalty: 1,
-            gap_open: 2,
-            gap_extend: 1,
-            band_width: 16,
-        };
-        let mut candidates = Vec::new();
-        let opt = default_opt();
-        collect_candidates(&fm, &norm, &alpha, sw, false, &opt, &mut candidates);
-        assert!(!candidates.is_empty());
-        assert!(candidates[0].score > 0);
-        assert!(candidates[0].cigar.contains('M'));
-    }
-
-    #[test]
-    fn collect_candidates_with_mismatch() {
-        let reference = b"ACGTACGTAGCTGATCGTAGCTAGCTAGCTGATCGTAGCTAGCTAGCTGAT";
-        let fm = build_test_fm(reference);
-        let mut read = reference[..40].to_vec();
-        read[20] = if read[20] == b'A' { b'T' } else { b'A' };
-        let norm = dna::normalize_seq(&read);
-        let alpha: Vec<u8> = norm.iter().map(|&b| dna::to_alphabet(b)).collect();
-        let sw = SwParams {
-            match_score: 2,
-            mismatch_penalty: 1,
-            gap_open: 2,
-            gap_extend: 1,
-            band_width: 16,
-        };
-        let mut candidates = Vec::new();
-        let opt = default_opt();
-        collect_candidates(&fm, &norm, &alpha, sw, false, &opt, &mut candidates);
-        assert!(!candidates.is_empty());
-        assert!(candidates[0].score > 0);
     }
 
     #[test]
@@ -445,35 +252,6 @@ mod tests {
         let lines = align_single_read(&fm, &rec, sw, &opt);
         assert!(!lines.is_empty());
         assert!(lines[0].contains("\t4\t")); // FLAG=4 unmapped
-    }
-
-    #[test]
-    fn dedup_candidates_removes_duplicates() {
-        let mut cands = vec![
-            AlignCandidate { score: 50, is_rev: false, rname: "chr1".into(), pos1: 10, cigar: "20M".into(), nm: 0, contig_idx: 0 },
-            AlignCandidate { score: 40, is_rev: false, rname: "chr1".into(), pos1: 10, cigar: "20M".into(), nm: 1, contig_idx: 0 },
-            AlignCandidate { score: 45, is_rev: true, rname: "chr1".into(), pos1: 10, cigar: "20M".into(), nm: 0, contig_idx: 0 },
-        ];
-        dedup_candidates(&mut cands);
-        assert_eq!(cands.len(), 2); // same pos+dir removed, different dir kept
-    }
-
-    #[test]
-    fn dedup_candidates_keeps_all_unique() {
-        let mut cands = vec![
-            AlignCandidate { score: 50, is_rev: false, rname: "chr1".into(), pos1: 10, cigar: "20M".into(), nm: 0, contig_idx: 0 },
-            AlignCandidate { score: 45, is_rev: false, rname: "chr1".into(), pos1: 20, cigar: "20M".into(), nm: 0, contig_idx: 0 },
-            AlignCandidate { score: 40, is_rev: true, rname: "chr1".into(), pos1: 10, cigar: "20M".into(), nm: 0, contig_idx: 0 },
-        ];
-        dedup_candidates(&mut cands);
-        assert_eq!(cands.len(), 3);
-    }
-
-    #[test]
-    fn dedup_candidates_empty() {
-        let mut cands: Vec<AlignCandidate> = vec![];
-        dedup_candidates(&mut cands);
-        assert!(cands.is_empty());
     }
 
     #[test]
@@ -562,38 +340,5 @@ mod tests {
             // 无论正向还是反向映射，重要的是 read 能被成功比对
             assert!(lines[0].contains("chr1"));
         }
-    }
-
-    #[test]
-    fn mapq_monotonically_decreases_with_better_secondary() {
-        // As second best score approaches best, MAPQ should decrease
-        let q1 = compute_mapq(100, 0);
-        let q2 = compute_mapq(100, 50);
-        let q3 = compute_mapq(100, 90);
-        assert!(q1 >= q2);
-        assert!(q2 >= q3);
-    }
-
-    #[test]
-    fn mapq_is_zero_for_equal_scores() {
-        for score in [1, 10, 50, 100] {
-            assert_eq!(compute_mapq(score, score), 0);
-        }
-    }
-
-    #[test]
-    fn collect_candidates_empty_query() {
-        let fm = build_test_fm(b"ACGTACGTACGTACGTACGTACGT");
-        let sw = SwParams {
-            match_score: 2,
-            mismatch_penalty: 1,
-            gap_open: 2,
-            gap_extend: 1,
-            band_width: 16,
-        };
-        let mut candidates = Vec::new();
-        let opt = default_opt();
-        collect_candidates(&fm, &[], &[], sw, false, &opt, &mut candidates);
-        assert!(candidates.is_empty());
     }
 }

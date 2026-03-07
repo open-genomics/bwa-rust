@@ -79,56 +79,51 @@ enum Commands {
     },
 }
 
+fn build_align_opt(
+    match_score: i32,
+    mismatch_penalty: i32,
+    gap_open: i32,
+    gap_extend: i32,
+    band_width: usize,
+    score_threshold: i32,
+    threads: usize,
+) -> align::AlignOpt {
+    align::AlignOpt {
+        match_score,
+        mismatch_penalty,
+        gap_open,
+        gap_extend,
+        band_width,
+        score_threshold,
+        min_seed_len: 19,
+        threads,
+    }
+}
+
 fn main() -> Result<()> {
     let cli = Cli::parse();
     match cli.command {
         Commands::Index { reference, output } => run_index(&reference, &output),
         Commands::Align {
-            index,
-            reads,
-            out,
-            match_score,
-            mismatch_penalty,
-            gap_open,
-            gap_extend,
-            band_width,
-            score_threshold,
-            threads,
+            index, reads, out,
+            match_score, mismatch_penalty, gap_open, gap_extend,
+            band_width, score_threshold, threads,
         } => {
-            let opt = align::AlignOpt {
-                match_score,
-                mismatch_penalty,
-                gap_open,
-                gap_extend,
-                band_width,
-                score_threshold,
-                min_seed_len: 19,
-                threads,
-            };
+            let opt = build_align_opt(
+                match_score, mismatch_penalty, gap_open, gap_extend,
+                band_width, score_threshold, threads,
+            );
             run_align(&index, &reads, out.as_deref(), opt)
         }
         Commands::Mem {
-            reference,
-            reads,
-            out,
-            match_score,
-            mismatch_penalty,
-            gap_open,
-            gap_extend,
-            band_width,
-            score_threshold,
-            threads,
+            reference, reads, out,
+            match_score, mismatch_penalty, gap_open, gap_extend,
+            band_width, score_threshold, threads,
         } => {
-            let opt = align::AlignOpt {
-                match_score,
-                mismatch_penalty,
-                gap_open,
-                gap_extend,
-                band_width,
-                score_threshold,
-                min_seed_len: 19,
-                threads,
-            };
+            let opt = build_align_opt(
+                match_score, mismatch_penalty, gap_open, gap_extend,
+                band_width, score_threshold, threads,
+            );
             run_mem(&reference, &reads, out.as_deref(), opt)
         }
     }

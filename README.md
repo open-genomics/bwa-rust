@@ -19,12 +19,16 @@
 
 ```
 .
-├── bwa-rust/          # Rust 版比对器（主要代码）
+├── Cargo.toml         # Cargo workspace 根配置
+├── .github/           # GitHub CI / Issue 模板 / PR 模板
+├── bwa-rust/          # Rust 版比对器（workspace 成员）
 │   ├── src/           #   源代码
 │   ├── docs/          #   架构文档、教程
 │   ├── data/          #   测试数据（toy.fa / toy_reads.fq）
 │   ├── examples/      #   示例代码
 │   ├── benches/       #   基准测试
+│   ├── tests/         #   集成测试
+│   ├── scripts/       #   开发脚本
 │   └── README.md      #   详细使用说明
 ├── bwa-0.7.19/        # C 版 BWA 源码（算法参考实现）
 ├── ROADMAP.md         # 开发路线图（v0.1.0 已全部完成）

@@ -71,22 +71,32 @@ cargo run --release -- align -i data/toy.fm data/toy_reads.fq \
 
 ```
 src/
-├── main.rs          # CLI 入口（clap）
-├── lib.rs           # Library 入口
+├── main.rs              # CLI 入口（clap）
+├── lib.rs               # Library 入口
+├── error.rs             # 自定义错误类型（BwaError / BwaResult）
 ├── io/
-│   ├── fasta.rs     # FASTA 解析器
-│   └── fastq.rs     # FASTQ 解析器
+│   ├── mod.rs           # IO 模块声明
+│   ├── fasta.rs         # FASTA 解析器
+│   ├── fastq.rs         # FASTQ 解析器
+│   └── sam.rs           # SAM 格式输出（header / record / unmapped）
 ├── index/
-│   ├── sa.rs        # 后缀数组构建（倍增法）
-│   ├── bwt.rs       # BWT 构建
-│   └── fm.rs        # FM 索引（C/Occ/SA/backward_search/稀疏SA）
+│   ├── mod.rs           # 索引模块声明
+│   ├── sa.rs            # 后缀数组构建（倍增法）
+│   ├── bwt.rs           # BWT 构建
+│   ├── fm.rs            # FM 索引（C/Occ/SA/backward_search/稀疏SA）
+│   └── builder.rs       # 从 FASTA 一键构建 FM 索引
 ├── align/
-│   ├── mod.rs       # 对齐主流程（并行、SAM输出、MAPQ）
-│   ├── seed.rs      # SMEM 种子查找
-│   ├── chain.rs     # 种子链构建与过滤
-│   └── sw.rs        # 带状仿射间隙 Smith-Waterman
+│   ├── mod.rs           # 对齐模块声明与 AlignOpt 配置
+│   ├── seed.rs          # SMEM 种子查找
+│   ├── chain.rs         # 种子链构建与过滤
+│   ├── sw.rs            # 带状仿射间隙 Smith-Waterman
+│   ├── extend.rs        # 链→完整对齐（左右扩展 + CIGAR 合并）
+│   ├── candidate.rs     # 对齐候选收集与去重
+│   ├── mapq.rs          # MAPQ 估算（BWA 风格得分差模型）
+│   └── pipeline.rs      # 对齐 pipeline（批量并行 + SAM 输出）
 └── util/
-    └── dna.rs       # DNA 编码/解码/反向互补
+    ├── mod.rs           # 工具模块声明
+    └── dna.rs           # DNA 编码/解码/反向互补
 ```
 
 ## 文档
