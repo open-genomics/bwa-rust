@@ -12,6 +12,8 @@ keywords = ["bioinformatics", "bwa", "alignment", "fm-index", "genomics"]
 categories = ["science", "command-line-utilities"]
 rust-version = "1.70"
 
+# ── 依赖 ──────────────────────────────────────────────
+
 [dependencies]
 anyhow = "1.0"
 clap = { version = "4.5", features = ["derive"] }
@@ -26,3 +28,43 @@ criterion = { version = "0.5", features = ["html_reports"] }
 [[bench]]
 name = "benchmarks"
 harness = false
+
+# ── Lint 配置 ─────────────────────────────────────────
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+needless_collect = "warn"
+manual_memcpy = "warn"
+large_enum_variant = "warn"
+clone_on_ref_ptr = "warn"
+redundant_closure_for_method_calls = "warn"
+semicolon_if_nothing_returned = "warn"
+cast_possible_truncation = "allow"
+cast_sign_loss = "allow"
+cast_precision_loss = "allow"
+too_many_arguments = "allow"
+module_name_repetitions = "allow"
+
+# ── Profile 优化 ──────────────────────────────────────
+
+[profile.dev]
+opt-level = 0
+debug = true
+incremental = true
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+strip = "symbols"
+panic = "abort"
+
+[profile.bench]
+inherits = "release"
+debug = true
+
+[profile.test]
+opt-level = 1
+debug = true

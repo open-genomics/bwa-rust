@@ -1,0 +1,17 @@
+# Clippy 静态分析配置
+# https://doc.rust-lang.org/clippy/configuration.html
+
+# 函数认知复杂度阈值（超过则警告）
+cognitive-complexity-threshold = 30
+
+# 单个函数最大行数
+too-many-lines-threshold = 200
+
+# 允许的函数参数数量
+too-many-arguments-threshold = 8
+
+# 类型复杂度阈值
+type-complexity-threshold = 300
+
+# MSRV：与 Cargo.toml 中 rust-version 保持一致
+msrv = "1.70"

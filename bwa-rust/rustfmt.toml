@@ -1,0 +1,31 @@
+# Rust 代码格式化配置
+# https://rust-lang.github.io/rustfmt/
+
+# 使用 2021 edition 风格
+edition = "2021"
+
+# 最大行宽
+max_width = 120
+
+# Tab 使用空格
+hard_tabs = false
+tab_spaces = 4
+
+# use 语句合并策略
+imports_granularity = "Module"
+
+# 函数参数换行策略
+fn_params_layout = "Tall"
+
+# 强制使用尾逗号
+trailing_comma = "Vertical"
+
+# 单行 if-else 允许
+single_line_if_else_max_width = 60
+
+# 链式调用缩进
+chain_width = 80
+
+# 注释格式化
+wrap_comments = false
+normalize_comments = false

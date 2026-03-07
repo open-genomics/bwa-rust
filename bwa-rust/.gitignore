@@ -1,7 +1,10 @@
 # Rust build artifacts
 /target/
 **/*.rs.bk
-Cargo.lock
+
+# 库项目应提交 Cargo.lock，二进制项目也建议提交
+# 如果是纯库，取消注释下行
+# Cargo.lock
 
 # IDE
 .vscode/
@@ -9,13 +12,36 @@ Cargo.lock
 *.swp
 *.swo
 *.iml
+*.sublime-project
+*.sublime-workspace
 
 # OS
 Thumbs.db
 .DS_Store
+Desktop.ini
+ehthumbs.db
 
 # Generated index files
 *.fm
 
-# Benchmark output
+# Benchmark output & profiling
 /target/criterion/
+perf.data
+perf.data.old
+flamegraph.svg
+cachegrind.out.*
+callgrind.out.*
+
+# Coverage
+/coverage/
+*.profraw
+*.profdata
+lcov.info
+tarpaulin-report.html
+
+# Documentation build
+/target/doc/
+
+# Environment
+.env
+.env.local

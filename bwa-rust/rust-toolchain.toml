@@ -1,0 +1,6 @@
+# Rust 工具链配置
+# https://rust-lang.github.io/rustup/overrides.html
+
+[toolchain]
+channel = "stable"
+components = ["rustfmt", "clippy"]

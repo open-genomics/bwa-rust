@@ -1,0 +1,19 @@
+# Cargo 构建配置
+# https://doc.rust-lang.org/cargo/reference/config.html
+
+[build]
+# 增量编译（dev 默认开启）
+incremental = true
+
+[target.'cfg(target_os = "linux")']
+# Linux 下使用 mold 链接器（如已安装）加速链接
+# rustflags = ["-C", "link-arg=-fuse-ld=mold"]
+
+[target.'cfg(target_os = "windows")']
+# Windows 下默认链接器即可
+
+[term]
+# 彩色输出
+color = "auto"
+# 显示编译进度条
+progress.when = "auto"
