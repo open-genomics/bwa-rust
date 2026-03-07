@@ -1,3 +1,11 @@
+// jemalloc：替换默认分配器，补回 musl malloc 性能，多线程 rayon 场景显著提升
+#[cfg(not(target_env = "msvc"))]
+use tikv_jemallocator::Jemalloc;
+
+#[cfg(not(target_env = "msvc"))]
+#[global_allocator]
+static GLOBAL: Jemalloc = Jemalloc;
+
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 
