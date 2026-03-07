@@ -53,10 +53,7 @@ pub fn best_chain(seeds: &[MemSeed], max_gap: usize) -> Option<Chain> {
             }
         }
 
-        if best_i
-            .map(|bi| dp[t] > dp[bi])
-            .unwrap_or(true)
-        {
+        if best_i.map(|bi| dp[t] > dp[bi]).unwrap_or(true) {
             best_i = Some(t);
         }
     }
@@ -88,13 +85,9 @@ pub fn build_chains(seeds: &[MemSeed], max_gap: usize) -> Vec<Chain> {
     }
 
     // 按 contig 分组
-    let mut by_contig: std::collections::HashMap<usize, Vec<MemSeed>> =
-        std::collections::HashMap::new();
+    let mut by_contig: std::collections::HashMap<usize, Vec<MemSeed>> = std::collections::HashMap::new();
     for s in seeds {
-        by_contig
-            .entry(s.contig)
-            .or_default()
-            .push(s.clone());
+        by_contig.entry(s.contig).or_default().push(s.clone());
     }
 
     let mut chains = Vec::new();
@@ -107,11 +100,8 @@ pub fn build_chains(seeds: &[MemSeed], max_gap: usize) -> Vec<Chain> {
             }
             if let Some(chain) = best_chain(&remaining, max_gap) {
                 // 从 remaining 中移除已用种子
-                let used: std::collections::HashSet<(usize, usize, u32, u32)> = chain
-                    .seeds
-                    .iter()
-                    .map(|s| (s.qb, s.qe, s.rb, s.re))
-                    .collect();
+                let used: std::collections::HashSet<(usize, usize, u32, u32)> =
+                    chain.seeds.iter().map(|s| (s.qb, s.qe, s.rb, s.re)).collect();
                 remaining.retain(|s| !used.contains(&(s.qb, s.qe, s.rb, s.re)));
                 chains.push(chain);
             } else {
@@ -187,8 +177,20 @@ mod tests {
     #[test]
     fn best_chain_simple_diagonal() {
         let seeds = vec![
-            MemSeed { contig: 0, qb: 0, qe: 4, rb: 0, re: 4 },
-            MemSeed { contig: 0, qb: 4, qe: 8, rb: 4, re: 8 },
+            MemSeed {
+                contig: 0,
+                qb: 0,
+                qe: 4,
+                rb: 0,
+                re: 4,
+            },
+            MemSeed {
+                contig: 0,
+                qb: 4,
+                qe: 8,
+                rb: 4,
+                re: 8,
+            },
         ];
         let chain = best_chain(&seeds, 10).expect("chain");
         assert_eq!(chain.contig, 0);
@@ -199,10 +201,34 @@ mod tests {
     #[test]
     fn best_chain_avoids_overlapping_and_far_gaps() {
         let seeds = vec![
-            MemSeed { contig: 0, qb: 0, qe: 4, rb: 0, re: 4 },
-            MemSeed { contig: 0, qb: 3, qe: 6, rb: 3, re: 6 },
-            MemSeed { contig: 0, qb: 20, qe: 24, rb: 20, re: 24 },
-            MemSeed { contig: 0, qb: 4, qe: 8, rb: 4, re: 8 },
+            MemSeed {
+                contig: 0,
+                qb: 0,
+                qe: 4,
+                rb: 0,
+                re: 4,
+            },
+            MemSeed {
+                contig: 0,
+                qb: 3,
+                qe: 6,
+                rb: 3,
+                re: 6,
+            },
+            MemSeed {
+                contig: 0,
+                qb: 20,
+                qe: 24,
+                rb: 20,
+                re: 24,
+            },
+            MemSeed {
+                contig: 0,
+                qb: 4,
+                qe: 8,
+                rb: 4,
+                re: 8,
+            },
         ];
         let chain = best_chain(&seeds, 10).expect("chain");
         assert_eq!(chain.seeds.len(), 2);
@@ -214,10 +240,34 @@ mod tests {
     #[test]
     fn build_chains_multi() {
         let seeds = vec![
-            MemSeed { contig: 0, qb: 0, qe: 4, rb: 0, re: 4 },
-            MemSeed { contig: 0, qb: 4, qe: 8, rb: 4, re: 8 },
-            MemSeed { contig: 0, qb: 0, qe: 4, rb: 100, re: 104 },
-            MemSeed { contig: 0, qb: 4, qe: 8, rb: 104, re: 108 },
+            MemSeed {
+                contig: 0,
+                qb: 0,
+                qe: 4,
+                rb: 0,
+                re: 4,
+            },
+            MemSeed {
+                contig: 0,
+                qb: 4,
+                qe: 8,
+                rb: 4,
+                re: 8,
+            },
+            MemSeed {
+                contig: 0,
+                qb: 0,
+                qe: 4,
+                rb: 100,
+                re: 104,
+            },
+            MemSeed {
+                contig: 0,
+                qb: 4,
+                qe: 8,
+                rb: 104,
+                re: 108,
+            },
         ];
         let chains = build_chains(&seeds, 10);
         assert!(chains.len() >= 2);
@@ -226,8 +276,28 @@ mod tests {
     #[test]
     fn filter_chains_removes_weak() {
         let mut chains = vec![
-            Chain { contig: 0, seeds: vec![MemSeed { contig: 0, qb: 0, qe: 20, rb: 0, re: 20 }], score: 20 },
-            Chain { contig: 0, seeds: vec![MemSeed { contig: 0, qb: 0, qe: 3, rb: 100, re: 103 }], score: 3 },
+            Chain {
+                contig: 0,
+                seeds: vec![MemSeed {
+                    contig: 0,
+                    qb: 0,
+                    qe: 20,
+                    rb: 0,
+                    re: 20,
+                }],
+                score: 20,
+            },
+            Chain {
+                contig: 0,
+                seeds: vec![MemSeed {
+                    contig: 0,
+                    qb: 0,
+                    qe: 3,
+                    rb: 100,
+                    re: 103,
+                }],
+                score: 3,
+            },
         ];
         filter_chains(&mut chains, 0.5);
         assert_eq!(chains.len(), 1);
@@ -241,7 +311,13 @@ mod tests {
 
     #[test]
     fn best_chain_single_seed() {
-        let seeds = vec![MemSeed { contig: 0, qb: 5, qe: 10, rb: 100, re: 105 }];
+        let seeds = vec![MemSeed {
+            contig: 0,
+            qb: 5,
+            qe: 10,
+            rb: 100,
+            re: 105,
+        }];
         let chain = best_chain(&seeds, 10).unwrap();
         assert_eq!(chain.seeds.len(), 1);
         assert_eq!(chain.score, 5);
@@ -251,9 +327,27 @@ mod tests {
     #[test]
     fn best_chain_three_collinear_seeds() {
         let seeds = vec![
-            MemSeed { contig: 0, qb: 0, qe: 5, rb: 0, re: 5 },
-            MemSeed { contig: 0, qb: 5, qe: 10, rb: 5, re: 10 },
-            MemSeed { contig: 0, qb: 10, qe: 15, rb: 10, re: 15 },
+            MemSeed {
+                contig: 0,
+                qb: 0,
+                qe: 5,
+                rb: 0,
+                re: 5,
+            },
+            MemSeed {
+                contig: 0,
+                qb: 5,
+                qe: 10,
+                rb: 5,
+                re: 10,
+            },
+            MemSeed {
+                contig: 0,
+                qb: 10,
+                qe: 15,
+                rb: 10,
+                re: 15,
+            },
         ];
         let chain = best_chain(&seeds, 10).unwrap();
         assert_eq!(chain.seeds.len(), 3);
@@ -263,8 +357,20 @@ mod tests {
     #[test]
     fn best_chain_different_contigs() {
         let seeds = vec![
-            MemSeed { contig: 0, qb: 0, qe: 5, rb: 0, re: 5 },
-            MemSeed { contig: 1, qb: 5, qe: 10, rb: 5, re: 10 },
+            MemSeed {
+                contig: 0,
+                qb: 0,
+                qe: 5,
+                rb: 0,
+                re: 5,
+            },
+            MemSeed {
+                contig: 1,
+                qb: 5,
+                qe: 10,
+                rb: 5,
+                re: 10,
+            },
         ];
         let chain = best_chain(&seeds, 10).unwrap();
         // Seeds on different contigs cannot chain together
@@ -281,8 +387,20 @@ mod tests {
     #[test]
     fn build_chains_sorted_by_score() {
         let seeds = vec![
-            MemSeed { contig: 0, qb: 0, qe: 10, rb: 0, re: 10 },
-            MemSeed { contig: 0, qb: 0, qe: 3, rb: 100, re: 103 },
+            MemSeed {
+                contig: 0,
+                qb: 0,
+                qe: 10,
+                rb: 0,
+                re: 10,
+            },
+            MemSeed {
+                contig: 0,
+                qb: 0,
+                qe: 3,
+                rb: 100,
+                re: 103,
+            },
         ];
         let chains = build_chains(&seeds, 10);
         assert!(!chains.is_empty());
@@ -301,8 +419,28 @@ mod tests {
     #[test]
     fn filter_chains_keeps_non_overlapping() {
         let mut chains = vec![
-            Chain { contig: 0, seeds: vec![MemSeed { contig: 0, qb: 0, qe: 10, rb: 0, re: 10 }], score: 10 },
-            Chain { contig: 0, seeds: vec![MemSeed { contig: 0, qb: 20, qe: 30, rb: 20, re: 30 }], score: 10 },
+            Chain {
+                contig: 0,
+                seeds: vec![MemSeed {
+                    contig: 0,
+                    qb: 0,
+                    qe: 10,
+                    rb: 0,
+                    re: 10,
+                }],
+                score: 10,
+            },
+            Chain {
+                contig: 0,
+                seeds: vec![MemSeed {
+                    contig: 0,
+                    qb: 20,
+                    qe: 30,
+                    rb: 20,
+                    re: 30,
+                }],
+                score: 10,
+            },
         ];
         filter_chains(&mut chains, 0.5);
         assert_eq!(chains.len(), 2);
@@ -311,8 +449,20 @@ mod tests {
     #[test]
     fn best_chain_gap_too_large() {
         let seeds = vec![
-            MemSeed { contig: 0, qb: 0, qe: 5, rb: 0, re: 5 },
-            MemSeed { contig: 0, qb: 100, qe: 105, rb: 100, re: 105 },
+            MemSeed {
+                contig: 0,
+                qb: 0,
+                qe: 5,
+                rb: 0,
+                re: 5,
+            },
+            MemSeed {
+                contig: 0,
+                qb: 100,
+                qe: 105,
+                rb: 100,
+                re: 105,
+            },
         ];
         // max_gap = 10, gap between seeds = 95
         let chain = best_chain(&seeds, 10).unwrap();

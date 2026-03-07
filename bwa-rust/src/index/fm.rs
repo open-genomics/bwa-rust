@@ -54,7 +54,9 @@ impl FMIndex {
         let mut freq = vec![0u32; sigma_us];
         for &ch in &bwt {
             let ci = ch as usize;
-            if ci < sigma_us { freq[ci] += 1; }
+            if ci < sigma_us {
+                freq[ci] += 1;
+            }
         }
         let mut c = vec![0u32; sigma_us];
         let mut acc = 0u32;
@@ -78,15 +80,38 @@ impl FMIndex {
             let end = ((bi + 1) * block).min(n);
             for &ch in &bwt[start..end] {
                 let ci = ch as usize;
-                if ci < sigma_us { running[ci] += 1; }
+                if ci < sigma_us {
+                    running[ci] += 1;
+                }
             }
         }
 
-        Self { magic: FM_MAGIC, version: FM_VERSION, sigma, block: block_u, c, bwt, occ_samples, sa, sa_sample_rate: 0, contigs, text, meta: None }
+        Self {
+            magic: FM_MAGIC,
+            version: FM_VERSION,
+            sigma,
+            block: block_u,
+            c,
+            bwt,
+            occ_samples,
+            sa,
+            sa_sample_rate: 0,
+            contigs,
+            text,
+            meta: None,
+        }
     }
 
     /// 构建使用稀疏 SA 采样的 FM 索引
-    pub fn build_sparse(text: Vec<u8>, bwt: Vec<u8>, sa: Vec<u32>, contigs: Vec<Contig>, sigma: u8, block: usize, sa_rate: u32) -> Self {
+    pub fn build_sparse(
+        text: Vec<u8>,
+        bwt: Vec<u8>,
+        sa: Vec<u32>,
+        contigs: Vec<Contig>,
+        sigma: u8,
+        block: usize,
+        sa_rate: u32,
+    ) -> Self {
         let mut fm = Self::build(text, bwt, sa, contigs, sigma, block);
         if sa_rate > 1 {
             fm.sparsify_sa(sa_rate);
@@ -131,7 +156,9 @@ impl FMIndex {
     #[inline]
     pub fn occ(&self, c: u8, pos: usize) -> u32 {
         // 返回 BWT[0..pos) 中 c 的出现次数
-        if pos == 0 { return 0; }
+        if pos == 0 {
+            return 0;
+        }
         let sigma_us = self.sigma as usize;
         let block = self.block as usize;
         let bi = (pos - 1) / block; // 所在块编号
@@ -139,7 +166,9 @@ impl FMIndex {
         let start = bi * block;
         let mut add = 0u32;
         for &ch in &self.bwt[start..pos] {
-            if ch == c { add += 1; }
+            if ch == c {
+                add += 1;
+            }
         }
         base + add
     }
@@ -155,13 +184,18 @@ impl FMIndex {
 
     /// 反向搜索精确匹配，pat 已经是编码后的字母表（不应包含 0）
     pub fn backward_search(&self, pat: &[u8]) -> Option<(usize, usize)> {
-        if self.bwt.is_empty() { return None; }
+        if self.bwt.is_empty() {
+            return None;
+        }
         let mut l = 0usize;
         let mut r = self.bwt.len();
         for &a in pat.iter().rev() {
             let (nl, nr) = self.rank_range(a, l, r);
-            if nl >= nr { return None; }
-            l = nl; r = nr;
+            if nl >= nr {
+                return None;
+            }
+            l = nl;
+            r = nr;
         }
         Some((l, r))
     }
@@ -203,7 +237,9 @@ impl FMIndex {
 
     /// 将文本位置映射到 (contig_index, contig_offset)。若落在分隔符($)位置，则返回 None。
     pub fn map_text_pos(&self, pos: u32) -> Option<(usize, u32)> {
-        if self.contigs.is_empty() { return None; }
+        if self.contigs.is_empty() {
+            return None;
+        }
         let mut lo = 0usize;
         let mut hi = self.contigs.len();
         while lo < hi {
@@ -255,7 +291,7 @@ mod tests {
     #[test]
     fn fm_backward_search_finds_pattern() {
         let fm = build_toy_fm(&[1, 2, 3, 4, 1, 2]); // ACGTAC
-        // search for "AC" = [1,2]
+                                                    // search for "AC" = [1,2]
         let res = fm.backward_search(&[1, 2]);
         assert!(res.is_some());
         let (l, r) = res.unwrap();
@@ -266,7 +302,7 @@ mod tests {
     #[test]
     fn fm_backward_search_not_found() {
         let fm = build_toy_fm(&[1, 2, 3, 4]); // ACGT
-        // search for "TT" = [4,4] — should not exist
+                                              // search for "TT" = [4,4] — should not exist
         let res = fm.backward_search(&[4, 4]);
         assert!(res.is_none());
     }
@@ -298,8 +334,16 @@ mod tests {
         // Two contigs: [0..3) and [4..7), separator at pos 3
         let text = vec![1u8, 2, 3, 0, 1, 3, 4, 0];
         let contigs = vec![
-            Contig { name: "c1".to_string(), len: 3, offset: 0 },
-            Contig { name: "c2".to_string(), len: 3, offset: 4 },
+            Contig {
+                name: "c1".to_string(),
+                len: 3,
+                offset: 0,
+            },
+            Contig {
+                name: "c2".to_string(),
+                len: 3,
+                offset: 4,
+            },
         ];
         let sa_arr = sa::build_sa(&text);
         let bwt_arr = bwt::build_bwt(&text, &sa_arr);
@@ -317,7 +361,7 @@ mod tests {
     #[test]
     fn fm_occ_correctness() {
         let fm = build_toy_fm(&[1, 2, 1, 2, 3]); // ACACG$
-        // Verify occ counts are consistent: occ(c, n) should equal total frequency of c in BWT
+                                                 // Verify occ counts are consistent: occ(c, n) should equal total frequency of c in BWT
         let n = fm.bwt.len();
         for c in 0..fm.sigma {
             let total = fm.occ(c, n);
@@ -329,7 +373,7 @@ mod tests {
     #[test]
     fn fm_sa_interval_positions_returns_all() {
         let fm = build_toy_fm(&[1, 2, 3, 1, 2, 3]); // ACGACG
-        // "ACG" appears twice
+                                                    // "ACG" appears twice
         let res = fm.backward_search(&[1, 2, 3]).unwrap();
         let positions = fm.sa_interval_positions(res.0, res.1);
         assert_eq!(positions.len(), 2);
@@ -339,7 +383,11 @@ mod tests {
     fn fm_sparse_sa_roundtrip() {
         let mut text: Vec<u8> = vec![1, 2, 3, 4, 1, 2, 3, 4, 1, 2];
         let len = text.len() as u32;
-        let contigs = vec![Contig { name: "s1".to_string(), len, offset: 0 }];
+        let contigs = vec![Contig {
+            name: "s1".to_string(),
+            len,
+            offset: 0,
+        }];
         text.push(0);
         let sa_arr = sa::build_sa(&text);
         let bwt_arr = bwt::build_bwt(&text, &sa_arr);
@@ -356,7 +404,11 @@ mod tests {
     fn fm_sparse_sa_backward_search() {
         let mut text: Vec<u8> = vec![1, 2, 3, 4, 1, 2, 3];
         let len = text.len() as u32;
-        let contigs = vec![Contig { name: "s1".to_string(), len, offset: 0 }];
+        let contigs = vec![Contig {
+            name: "s1".to_string(),
+            len,
+            offset: 0,
+        }];
         text.push(0);
         let sa_arr = sa::build_sa(&text);
         let bwt_arr = bwt::build_bwt(&text, &sa_arr);

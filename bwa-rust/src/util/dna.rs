@@ -2,7 +2,9 @@ pub const SIGMA: usize = 6; // {0:$, 1:A, 2:C, 3:G, 4:T, 5:N}
 
 #[inline]
 pub fn to_alphabet(b: u8) -> u8 {
-    if b == 0 { return 0; }
+    if b == 0 {
+        return 0;
+    }
     match b.to_ascii_uppercase() {
         b'A' => 1,
         b'C' => 2,
@@ -112,10 +114,7 @@ mod tests {
 
     #[test]
     fn revcomp_roundtrip_various() {
-        let seqs: &[&[u8]] = &[
-            b"A", b"AAAA", b"ACGTACGT", b"NNNN", b"TGCA",
-            b"ACGTNNNNACGT",
-        ];
+        let seqs: &[&[u8]] = &[b"A", b"AAAA", b"ACGTACGT", b"NNNN", b"TGCA", b"ACGTNNNNACGT"];
         for &s in seqs {
             let norm = normalize_seq(s);
             let rc = revcomp(&norm);
@@ -140,7 +139,7 @@ mod tests {
     fn to_from_alphabet_complete_mapping() {
         // Verify the full mapping table
         assert_eq!(to_alphabet(b'$'), 5); // unknown -> N
-        assert_eq!(from_alphabet(0), 0);  // sentinel
+        assert_eq!(from_alphabet(0), 0); // sentinel
         for code in 0..=5u8 {
             let base = from_alphabet(code);
             if code == 0 {

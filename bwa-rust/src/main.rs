@@ -1,11 +1,17 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 
-use bwa_rust::index;
 use bwa_rust::align;
+use bwa_rust::index;
 
 #[derive(Parser, Debug)]
-#[command(name = "bwa-rust", author, version, about = "Rust implementation inspired by BWA", arg_required_else_help = true)]
+#[command(
+    name = "bwa-rust",
+    author,
+    version,
+    about = "Rust implementation inspired by BWA",
+    arg_required_else_help = true
+)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -105,24 +111,48 @@ fn main() -> Result<()> {
     match cli.command {
         Commands::Index { reference, output } => run_index(&reference, &output),
         Commands::Align {
-            index, reads, out,
-            match_score, mismatch_penalty, gap_open, gap_extend,
-            band_width, score_threshold, threads,
+            index,
+            reads,
+            out,
+            match_score,
+            mismatch_penalty,
+            gap_open,
+            gap_extend,
+            band_width,
+            score_threshold,
+            threads,
         } => {
             let opt = build_align_opt(
-                match_score, mismatch_penalty, gap_open, gap_extend,
-                band_width, score_threshold, threads,
+                match_score,
+                mismatch_penalty,
+                gap_open,
+                gap_extend,
+                band_width,
+                score_threshold,
+                threads,
             );
             run_align(&index, &reads, out.as_deref(), opt)
         }
         Commands::Mem {
-            reference, reads, out,
-            match_score, mismatch_penalty, gap_open, gap_extend,
-            band_width, score_threshold, threads,
+            reference,
+            reads,
+            out,
+            match_score,
+            mismatch_penalty,
+            gap_open,
+            gap_extend,
+            band_width,
+            score_threshold,
+            threads,
         } => {
             let opt = build_align_opt(
-                match_score, mismatch_penalty, gap_open, gap_extend,
-                band_width, score_threshold, threads,
+                match_score,
+                mismatch_penalty,
+                gap_open,
+                gap_extend,
+                band_width,
+                score_threshold,
+                threads,
             );
             run_mem(&reference, &reads, out.as_deref(), opt)
         }
@@ -143,32 +173,27 @@ fn run_index(reference: &str, output: &str) -> Result<()> {
     });
 
     let out_path = format!("{}.fm", output);
-    result.fm.save_to_file(&out_path)
+    result
+        .fm
+        .save_to_file(&out_path)
         .map_err(|e| anyhow::anyhow!("cannot write index to '{}': {}", out_path, e))?;
     println!("FM index saved: {}", out_path);
     Ok(())
 }
 
-fn run_align(
-    index_path: &str,
-    reads_path: &str,
-    out_path: Option<&str>,
-    opt: align::AlignOpt,
-) -> Result<()> {
+fn run_align(index_path: &str, reads_path: &str, out_path: Option<&str>, opt: align::AlignOpt) -> Result<()> {
     align::align_fastq_with_opt(index_path, reads_path, out_path, opt)
 }
 
-fn run_mem(
-    reference: &str,
-    reads_path: &str,
-    out_path: Option<&str>,
-    opt: align::AlignOpt,
-) -> Result<()> {
+fn run_mem(reference: &str, reads_path: &str, out_path: Option<&str>, opt: align::AlignOpt) -> Result<()> {
     eprintln!("[bwa-rust mem] Loading reference: {}", reference);
 
     let result = index::builder::build_fm_from_fasta(reference, 512)?;
 
-    eprintln!("[bwa-rust mem] {} sequences, {} bp total", result.n_seqs, result.total_len);
+    eprintln!(
+        "[bwa-rust mem] {} sequences, {} bp total",
+        result.n_seqs, result.total_len
+    );
     eprintln!("[bwa-rust mem] FM index built");
 
     let fm = std::sync::Arc::new(result.fm);

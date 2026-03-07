@@ -42,8 +42,8 @@
 //! - [`align`] — 序列比对算法（SMEM 种子、链构建、Smith-Waterman）
 //! - [`util`] — DNA 编码 / 解码 / 反向互补等工具函数
 
-pub mod error;
-pub mod io;
-pub mod index;
-pub mod util;
 pub mod align;
+pub mod error;
+pub mod index;
+pub mod io;
+pub mod util;

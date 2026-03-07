@@ -2,13 +2,10 @@
 
 use std::io::Cursor;
 
+use bwa_rust::align::{build_chains, chain_to_alignment, filter_chains, find_smem_seeds, SwParams};
 use bwa_rust::index::builder::build_fm_index;
 use bwa_rust::index::fm::FMIndex;
-use bwa_rust::index::{sa, bwt};
-use bwa_rust::align::{
-    SwParams, find_smem_seeds, build_chains, filter_chains,
-    chain_to_alignment,
-};
+use bwa_rust::index::{bwt, sa};
 use bwa_rust::io::fasta::FastaReader;
 use bwa_rust::io::fastq::FastqReader;
 use bwa_rust::io::sam;
@@ -162,9 +159,7 @@ fn e2e_sam_output_format() {
     sam::write_header(&mut buf, &contigs).unwrap();
 
     let unmapped = sam::format_unmapped("read1", "ACGTACGT", "IIIIIIII");
-    let mapped = sam::format_record(
-        "read2", 0, "chr1", 100, 60, "8M", "ACGTACGT", "IIIIIIII", 16, 0, 0,
-    );
+    let mapped = sam::format_record("read2", 0, "chr1", 100, 60, "8M", "ACGTACGT", "IIIIIIII", 16, 0, 0);
 
     // 验证 SAM 格式正确性
     let header = String::from_utf8(buf).unwrap();
@@ -238,18 +233,17 @@ fn e2e_fm_index_serialize_deserialize_search() {
 
 #[test]
 fn e2e_dna_encode_decode_roundtrip() {
-    let sequences: &[&[u8]] = &[
-        b"ACGTACGT",
-        b"NNNNNNNN",
-        b"AAAAAAAAA",
-        b"TTTTTTTTT",
-        b"ACGTNNACGT",
-    ];
+    let sequences: &[&[u8]] = &[b"ACGTACGT", b"NNNNNNNN", b"AAAAAAAAA", b"TTTTTTTTT", b"ACGTNNACGT"];
     for &seq in sequences {
         let norm = dna::normalize_seq(seq);
         let encoded: Vec<u8> = norm.iter().map(|&b| dna::to_alphabet(b)).collect();
         let decoded: Vec<u8> = encoded.iter().map(|&a| dna::from_alphabet(a)).collect();
-        assert_eq!(decoded, norm, "encode/decode roundtrip failed for {:?}", std::str::from_utf8(seq));
+        assert_eq!(
+            decoded,
+            norm,
+            "encode/decode roundtrip failed for {:?}",
+            std::str::from_utf8(seq)
+        );
     }
 }
 

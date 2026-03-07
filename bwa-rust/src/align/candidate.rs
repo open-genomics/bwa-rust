@@ -1,10 +1,10 @@
 use crate::index::fm::FMIndex;
 use crate::util::dna;
 
-use super::{AlignOpt, SwParams};
 use super::extend::chain_to_alignment_buf;
 use super::sw;
 use super::{build_chains, filter_chains, find_smem_seeds};
+use super::{AlignOpt, SwParams};
 
 #[derive(Debug, Clone)]
 pub struct AlignCandidate {
@@ -107,8 +107,8 @@ pub fn dedup_candidates(candidates: &mut Vec<AlignCandidate>) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::index::{bwt, sa};
     use crate::index::fm::{Contig, FMIndex};
+    use crate::index::{bwt, sa};
 
     fn default_opt() -> AlignOpt {
         AlignOpt::default()
@@ -195,9 +195,33 @@ mod tests {
     #[test]
     fn dedup_candidates_removes_duplicates() {
         let mut cands = vec![
-            AlignCandidate { score: 50, is_rev: false, rname: "chr1".into(), pos1: 10, cigar: "20M".into(), nm: 0, contig_idx: 0 },
-            AlignCandidate { score: 40, is_rev: false, rname: "chr1".into(), pos1: 10, cigar: "20M".into(), nm: 1, contig_idx: 0 },
-            AlignCandidate { score: 45, is_rev: true, rname: "chr1".into(), pos1: 10, cigar: "20M".into(), nm: 0, contig_idx: 0 },
+            AlignCandidate {
+                score: 50,
+                is_rev: false,
+                rname: "chr1".into(),
+                pos1: 10,
+                cigar: "20M".into(),
+                nm: 0,
+                contig_idx: 0,
+            },
+            AlignCandidate {
+                score: 40,
+                is_rev: false,
+                rname: "chr1".into(),
+                pos1: 10,
+                cigar: "20M".into(),
+                nm: 1,
+                contig_idx: 0,
+            },
+            AlignCandidate {
+                score: 45,
+                is_rev: true,
+                rname: "chr1".into(),
+                pos1: 10,
+                cigar: "20M".into(),
+                nm: 0,
+                contig_idx: 0,
+            },
         ];
         dedup_candidates(&mut cands);
         assert_eq!(cands.len(), 2); // same pos+dir removed, different dir kept
@@ -206,9 +230,33 @@ mod tests {
     #[test]
     fn dedup_candidates_keeps_all_unique() {
         let mut cands = vec![
-            AlignCandidate { score: 50, is_rev: false, rname: "chr1".into(), pos1: 10, cigar: "20M".into(), nm: 0, contig_idx: 0 },
-            AlignCandidate { score: 45, is_rev: false, rname: "chr1".into(), pos1: 20, cigar: "20M".into(), nm: 0, contig_idx: 0 },
-            AlignCandidate { score: 40, is_rev: true, rname: "chr1".into(), pos1: 10, cigar: "20M".into(), nm: 0, contig_idx: 0 },
+            AlignCandidate {
+                score: 50,
+                is_rev: false,
+                rname: "chr1".into(),
+                pos1: 10,
+                cigar: "20M".into(),
+                nm: 0,
+                contig_idx: 0,
+            },
+            AlignCandidate {
+                score: 45,
+                is_rev: false,
+                rname: "chr1".into(),
+                pos1: 20,
+                cigar: "20M".into(),
+                nm: 0,
+                contig_idx: 0,
+            },
+            AlignCandidate {
+                score: 40,
+                is_rev: true,
+                rname: "chr1".into(),
+                pos1: 10,
+                cigar: "20M".into(),
+                nm: 0,
+                contig_idx: 0,
+            },
         ];
         dedup_candidates(&mut cands);
         assert_eq!(cands.len(), 3);

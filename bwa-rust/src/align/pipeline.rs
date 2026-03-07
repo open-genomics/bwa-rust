@@ -9,17 +9,12 @@ use crate::io::fastq::{FastqReader, FastqRecord};
 use crate::io::sam;
 use crate::util::dna;
 
+use super::candidate::{collect_candidates, dedup_candidates, AlignCandidate};
+use super::mapq::compute_mapq;
 use super::AlignOpt;
 use super::SwParams;
-use super::candidate::{AlignCandidate, collect_candidates, dedup_candidates};
-use super::mapq::compute_mapq;
 
-pub fn align_fastq_with_opt(
-    index_path: &str,
-    fastq_path: &str,
-    out_path: Option<&str>,
-    opt: AlignOpt,
-) -> Result<()> {
+pub fn align_fastq_with_opt(index_path: &str, fastq_path: &str, out_path: Option<&str>, opt: AlignOpt) -> Result<()> {
     let fm = Arc::new(FMIndex::load_from_file(index_path)?);
     align_fastq_with_fm_opt(fm, fastq_path, out_path, opt)
 }
@@ -30,7 +25,6 @@ pub fn align_fastq_with_fm_opt(
     out_path: Option<&str>,
     opt: AlignOpt,
 ) -> Result<()> {
-
     let fq = std::fs::File::open(fastq_path)?;
     let mut reader = FastqReader::new(std::io::BufReader::new(fq));
 
@@ -41,9 +35,7 @@ pub fn align_fastq_with_fm_opt(
     };
 
     // SAM header
-    let contig_info: Vec<(&str, u32)> = fm.contigs.iter()
-        .map(|c| (c.name.as_str(), c.len))
-        .collect();
+    let contig_info: Vec<(&str, u32)> = fm.contigs.iter().map(|c| (c.name.as_str(), c.len)).collect();
     sam::write_header(&mut out_box, &contig_info)?;
 
     let sw_params = SwParams {
@@ -78,9 +70,7 @@ pub fn align_fastq_with_fm_opt(
         let results: Vec<Vec<String>> = pool.install(|| {
             batch
                 .par_iter()
-                .map(|rec| {
-                    align_single_read(&fm_ref, rec, sw_params, &opt)
-                })
+                .map(|rec| align_single_read(&fm_ref, rec, sw_params, &opt))
                 .collect()
         });
 
@@ -95,12 +85,7 @@ pub fn align_fastq_with_fm_opt(
 }
 
 /// 对单条 read 进行比对，返回一个或多个 SAM 行
-pub(crate) fn align_single_read(
-    fm: &FMIndex,
-    rec: &FastqRecord,
-    sw_params: SwParams,
-    opt: &AlignOpt,
-) -> Vec<String> {
+pub(crate) fn align_single_read(fm: &FMIndex, rec: &FastqRecord, sw_params: SwParams, opt: &AlignOpt) -> Vec<String> {
     let qname = &rec.id;
     let seq = &rec.seq;
     let qual = &rec.qual;
@@ -175,11 +160,7 @@ pub(crate) fn align_single_read(
             0
         };
 
-        let sub_score = if idx == 0 {
-            second_best_score
-        } else {
-            best_score
-        };
+        let sub_score = if idx == 0 { second_best_score } else { best_score };
 
         // SAM 规范：FLAG 含 0x10 时，SEQ 为原始 read 的反向互补，QUAL 反转
         let (out_seq, out_qual) = if cand.is_rev {
@@ -189,8 +170,17 @@ pub(crate) fn align_single_read(
         };
 
         sam_lines.push(sam::format_record(
-            qname, flag, &cand.rname, cand.pos1, mapq, &cand.cigar,
-            out_seq, out_qual, cand.score, sub_score, cand.nm,
+            qname,
+            flag,
+            &cand.rname,
+            cand.pos1,
+            mapq,
+            &cand.cigar,
+            out_seq,
+            out_qual,
+            cand.score,
+            sub_score,
+            cand.nm,
         ));
 
         // 限制输出的比对数量
@@ -205,8 +195,8 @@ pub(crate) fn align_single_read(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::index::{bwt, sa};
     use crate::index::fm::{Contig, FMIndex};
+    use crate::index::{bwt, sa};
     use crate::io::fastq::FastqRecord;
     use crate::util::dna;
 

@@ -1,7 +1,7 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 
-use bwa_rust::index::{sa, bwt, fm};
 use bwa_rust::align::{self, SwParams};
+use bwa_rust::index::{bwt, fm, sa};
 use bwa_rust::util::dna;
 
 fn make_reference(len: usize) -> Vec<u8> {
@@ -90,5 +90,11 @@ fn bench_build_sa(c: &mut Criterion) {
     });
 }
 
-criterion_group!(benches, bench_backward_search, bench_smem_seeds, bench_banded_sw, bench_build_sa);
+criterion_group!(
+    benches,
+    bench_backward_search,
+    bench_smem_seeds,
+    bench_banded_sw,
+    bench_build_sa
+);
 criterion_main!(benches);

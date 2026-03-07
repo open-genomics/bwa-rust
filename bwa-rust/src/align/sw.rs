@@ -284,7 +284,12 @@ pub fn extend_right(query: &[u8], reference: &[u8], p: SwParams, zdrop: i32) -> 
     let m = query.len();
     let n = reference.len();
     if m == 0 || n == 0 {
-        return ExtendResult { score: 0, query_len: 0, ref_len: 0, ops: vec![] };
+        return ExtendResult {
+            score: 0,
+            query_len: 0,
+            ref_len: 0,
+            ops: vec![],
+        };
     }
 
     let rows = m + 1;
@@ -308,27 +313,61 @@ pub fn extend_right(query: &[u8], reference: &[u8], p: SwParams, zdrop: i32) -> 
         let i_isize = i as isize;
         let band = p.band_width as isize;
         let j_lo = if band >= 0 { (i_isize - band).max(1) as usize } else { 1 };
-        let j_hi = if band >= 0 { (i_isize + band).min(n as isize) as usize } else { n };
+        let j_hi = if band >= 0 {
+            (i_isize + band).min(n as isize) as usize
+        } else {
+            n
+        };
 
         for j in j_lo..=j_hi {
-            let idx      = i * cols + j;
-            let up_idx   = (i - 1) * cols + j;
+            let idx = i * cols + j;
+            let up_idx = (i - 1) * cols + j;
             let left_idx = i * cols + (j - 1);
             let diag_idx = (i - 1) * cols + (j - 1);
 
-            let e_val = if h[up_idx] != NEG_INF { (h[up_idx] - p.gap_open - p.gap_extend).max(if e[up_idx] != NEG_INF { e[up_idx] - p.gap_extend } else { NEG_INF }) } else { NEG_INF };
+            let e_val = if h[up_idx] != NEG_INF {
+                (h[up_idx] - p.gap_open - p.gap_extend).max(if e[up_idx] != NEG_INF {
+                    e[up_idx] - p.gap_extend
+                } else {
+                    NEG_INF
+                })
+            } else {
+                NEG_INF
+            };
             e[idx] = e_val;
 
-            let f_val = if h[left_idx] != NEG_INF { (h[left_idx] - p.gap_open - p.gap_extend).max(if f[left_idx] != NEG_INF { f[left_idx] - p.gap_extend } else { NEG_INF }) } else { NEG_INF };
+            let f_val = if h[left_idx] != NEG_INF {
+                (h[left_idx] - p.gap_open - p.gap_extend).max(if f[left_idx] != NEG_INF {
+                    f[left_idx] - p.gap_extend
+                } else {
+                    NEG_INF
+                })
+            } else {
+                NEG_INF
+            };
             f[idx] = f_val;
 
-            let subst = if query[i - 1] == reference[j - 1] { p.match_score } else { -p.mismatch_penalty };
-            let diag_val = if h[diag_idx] != NEG_INF { h[diag_idx] + subst } else { NEG_INF };
+            let subst = if query[i - 1] == reference[j - 1] {
+                p.match_score
+            } else {
+                -p.mismatch_penalty
+            };
+            let diag_val = if h[diag_idx] != NEG_INF {
+                h[diag_idx] + subst
+            } else {
+                NEG_INF
+            };
 
             let mut val = diag_val;
-            if e_val > val { val = e_val; }
-            if f_val > val { val = f_val; }
-            if val < 0 { val = 0; }
+            if e_val > val {
+                val = e_val;
+            }
+            if f_val > val {
+                val = f_val;
+            }
+            if val < 0 {
+                val = 0;
+            }
             h[idx] = val;
 
             if val > best_score {
@@ -336,7 +375,9 @@ pub fn extend_right(query: &[u8], reference: &[u8], p: SwParams, zdrop: i32) -> 
                 best_i = i;
                 best_j = j;
             }
-            if val > max_score { max_score = val; }
+            if val > max_score {
+                max_score = val;
+            }
         }
 
         // z-drop: if max score seen in this row is too far below global max, stop
@@ -347,7 +388,12 @@ pub fn extend_right(query: &[u8], reference: &[u8], p: SwParams, zdrop: i32) -> 
     }
 
     if best_score <= 0 {
-        return ExtendResult { score: 0, query_len: 0, ref_len: 0, ops: vec![] };
+        return ExtendResult {
+            score: 0,
+            query_len: 0,
+            ref_len: 0,
+            ops: vec![],
+        };
     }
 
     // 回溯
@@ -357,14 +403,33 @@ pub fn extend_right(query: &[u8], reference: &[u8], p: SwParams, zdrop: i32) -> 
     while i > 0 && j > 0 {
         let idx = i * cols + j;
         let hv = h[idx];
-        if hv == 0 { break; }
+        if hv == 0 {
+            break;
+        }
         let diag_idx = (i - 1) * cols + (j - 1);
-        let subst = if query[i - 1] == reference[j - 1] { p.match_score } else { -p.mismatch_penalty };
-        let dv = if h[diag_idx] != NEG_INF { h[diag_idx] + subst } else { NEG_INF };
-        if hv == dv { ops.push('M'); i -= 1; j -= 1; }
-        else if hv == e[idx] { ops.push('I'); i -= 1; }
-        else if hv == f[idx] { ops.push('D'); j -= 1; }
-        else { break; }
+        let subst = if query[i - 1] == reference[j - 1] {
+            p.match_score
+        } else {
+            -p.mismatch_penalty
+        };
+        let dv = if h[diag_idx] != NEG_INF {
+            h[diag_idx] + subst
+        } else {
+            NEG_INF
+        };
+        if hv == dv {
+            ops.push('M');
+            i -= 1;
+            j -= 1;
+        } else if hv == e[idx] {
+            ops.push('I');
+            i -= 1;
+        } else if hv == f[idx] {
+            ops.push('D');
+            j -= 1;
+        } else {
+            break;
+        }
     }
     ops.reverse();
 

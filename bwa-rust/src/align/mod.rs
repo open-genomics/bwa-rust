@@ -1,18 +1,18 @@
-pub mod seed;
+pub mod candidate;
 pub mod chain;
-pub mod sw;
 pub mod extend;
 pub mod mapq;
-pub mod candidate;
 pub mod pipeline;
+pub mod seed;
+pub mod sw;
 
-pub use sw::{SwParams, SwResult, banded_sw};
-pub use seed::{MemSeed, AlnReg, find_smem_seeds, find_mem_seeds};
-pub use chain::{Chain, best_chain, build_chains, filter_chains};
-pub use extend::{ChainAlignResult, chain_to_alignment, chain_to_alignment_buf};
+pub use candidate::{collect_candidates, dedup_candidates, AlignCandidate};
+pub use chain::{best_chain, build_chains, filter_chains, Chain};
+pub use extend::{chain_to_alignment, chain_to_alignment_buf, ChainAlignResult};
 pub use mapq::compute_mapq;
-pub use candidate::{AlignCandidate, collect_candidates, dedup_candidates};
-pub use pipeline::{align_fastq_with_opt, align_fastq_with_fm_opt};
+pub use pipeline::{align_fastq_with_fm_opt, align_fastq_with_opt};
+pub use seed::{find_mem_seeds, find_smem_seeds, AlnReg, MemSeed};
+pub use sw::{banded_sw, SwParams, SwResult};
 
 #[derive(Clone, Copy, Debug)]
 pub struct AlignOpt {

@@ -1,7 +1,7 @@
 use anyhow::Result;
 use std::io::BufRead;
 
-use super::{sa, bwt, fm};
+use super::{bwt, fm, sa};
 use crate::io::fasta::FastaReader;
 use crate::util::dna;
 
@@ -30,7 +30,11 @@ pub fn build_fm_index<R: BufRead>(reader: R, block_size: usize) -> Result<IndexB
             text.push(dna::to_alphabet(b));
         }
         let len_u32 = (text.len() as u32).saturating_sub(start);
-        contigs.push(fm::Contig { name: rec.id, len: len_u32, offset: start });
+        contigs.push(fm::Contig {
+            name: rec.id,
+            len: len_u32,
+            offset: start,
+        });
         // sentinel between contigs
         text.push(0);
     }
@@ -51,8 +55,7 @@ pub fn build_fm_index<R: BufRead>(reader: R, block_size: usize) -> Result<IndexB
 
 /// Convenience: build FM index from a FASTA file path
 pub fn build_fm_from_fasta(path: &str, block_size: usize) -> Result<IndexBuildResult> {
-    let fh = std::fs::File::open(path)
-        .map_err(|e| anyhow::anyhow!("cannot open FASTA '{}': {}", path, e))?;
+    let fh = std::fs::File::open(path).map_err(|e| anyhow::anyhow!("cannot open FASTA '{}': {}", path, e))?;
     let buf = std::io::BufReader::new(fh);
     build_fm_index(buf, block_size)
 }
@@ -119,10 +122,7 @@ mod tests {
         let fm = &result.fm;
         let offset = fm.contigs[0].offset as usize;
         let len = fm.contigs[0].len as usize;
-        let recovered: Vec<u8> = fm.text[offset..offset + len]
-            .iter()
-            .map(|&c| dna::from_alphabet(c))
-            .collect();
+        let recovered: Vec<u8> = fm.text[offset..offset + len].iter().map(|&c| dna::from_alphabet(c)).collect();
         assert_eq!(recovered, b"ACGTN");
     }
 

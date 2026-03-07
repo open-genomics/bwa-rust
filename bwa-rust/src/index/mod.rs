@@ -1,4 +1,4 @@
-pub mod sa;
+pub mod builder;
 pub mod bwt;
 pub mod fm;
-pub mod builder;
+pub mod sa;

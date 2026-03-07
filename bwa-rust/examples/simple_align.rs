@@ -5,8 +5,8 @@
 //! cargo run --example simple_align
 //! ```
 
-use bwa_rust::index::{sa, bwt, fm};
 use bwa_rust::align::{self, SwParams};
+use bwa_rust::index::{bwt, fm, sa};
 use bwa_rust::util::dna;
 
 fn main() {
@@ -30,18 +30,23 @@ fn main() {
     let bwt_arr = bwt::build_bwt(&text, &sa_arr);
     let fm_idx = fm::FMIndex::build(text, bwt_arr, sa_arr, contigs, dna::SIGMA as u8, 16);
 
-    println!("FM 索引构建完成：BWT 长度={}, SA 长度={}", fm_idx.bwt.len(), fm_idx.sa.len());
+    println!(
+        "FM 索引构建完成：BWT 长度={}, SA 长度={}",
+        fm_idx.bwt.len(),
+        fm_idx.sa.len()
+    );
 
     // 3. 精确匹配搜索
     let pattern = b"GCTGATCGTAG";
-    let pattern_alpha: Vec<u8> = dna::normalize_seq(pattern)
-        .iter()
-        .map(|&b| dna::to_alphabet(b))
-        .collect();
+    let pattern_alpha: Vec<u8> = dna::normalize_seq(pattern).iter().map(|&b| dna::to_alphabet(b)).collect();
 
     if let Some((l, r)) = fm_idx.backward_search(&pattern_alpha) {
         let positions = fm_idx.sa_interval_positions(l, r);
-        println!("\n精确匹配 '{}': 找到 {} 处", std::str::from_utf8(pattern).unwrap(), positions.len());
+        println!(
+            "\n精确匹配 '{}': 找到 {} 处",
+            std::str::from_utf8(pattern).unwrap(),
+            positions.len()
+        );
         for pos in &positions {
             if let Some((ci, off)) = fm_idx.map_text_pos(*pos) {
                 println!("  contig={}, offset={}", fm_idx.contigs[ci].name, off);
@@ -57,8 +62,10 @@ fn main() {
     let seeds = align::find_smem_seeds(&fm_idx, &read_alpha, 5);
     println!("\nSMEM 种子（read='{}'）:", std::str::from_utf8(read).unwrap());
     for s in &seeds {
-        println!("  read[{}..{}] -> ref[{}..{}] (contig={})",
-            s.qb, s.qe, s.rb, s.re, s.contig);
+        println!(
+            "  read[{}..{}] -> ref[{}..{}] (contig={})",
+            s.qb, s.qe, s.rb, s.re, s.contig
+        );
     }
 
     // 5. 带状 Smith-Waterman 对齐
@@ -87,8 +94,13 @@ fn main() {
         let chains = align::build_chains(&seeds, 50);
         println!("\n构建了 {} 条种子链:", chains.len());
         for (i, ch) in chains.iter().enumerate() {
-            println!("  链{}: contig={}, 种子数={}, 得分={}",
-                i, ch.contig, ch.seeds.len(), ch.score);
+            println!(
+                "  链{}: contig={}, 种子数={}, 得分={}",
+                i,
+                ch.contig,
+                ch.seeds.len(),
+                ch.score
+            );
         }
     }
 

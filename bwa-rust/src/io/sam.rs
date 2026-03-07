@@ -1,11 +1,8 @@
-use std::io::Write;
 use anyhow::Result;
+use std::io::Write;
 
 /// Write SAM header (@HD, @SQ, @PG) to output
-pub fn write_header<W: Write, S: AsRef<str>>(
-    out: &mut W,
-    contigs: &[(S, u32)],
-) -> Result<()> {
+pub fn write_header<W: Write, S: AsRef<str>>(out: &mut W, contigs: &[(S, u32)]) -> Result<()> {
     writeln!(out, "@HD\tVN:1.6\tSO:unsorted")?;
     for (name, len) in contigs {
         writeln!(out, "@SQ\tSN:{}\tLN:{}", name.as_ref(), len)?;
@@ -16,10 +13,7 @@ pub fn write_header<W: Write, S: AsRef<str>>(
 
 /// Format an unmapped SAM record (FLAG=4)
 pub fn format_unmapped(qname: &str, seq: &str, qual: &str) -> String {
-    format!(
-        "{}\t4\t*\t0\t0\t*\t*\t0\t0\t{}\t{}",
-        qname, seq, qual,
-    )
+    format!("{}\t4\t*\t0\t0\t*\t*\t0\t0\t{}\t{}", qname, seq, qual,)
 }
 
 /// Format a mapped SAM record with optional tags

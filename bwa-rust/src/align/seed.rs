@@ -39,11 +39,7 @@ pub struct MemSeed {
 /// SMEM 搜索：对 read 的每个位置，找到以该位置为起点的最长精确匹配（MEM）。
 /// 使用 FM 索引的 backward_search 逐步延伸。
 /// 之后过滤被包含的种子，仅保留超级最大精确匹配（SMEM）。
-pub fn find_smem_seeds(
-    fm: &FMIndex,
-    query_alpha: &[u8],
-    min_len: usize,
-) -> Vec<MemSeed> {
+pub fn find_smem_seeds(fm: &FMIndex, query_alpha: &[u8], min_len: usize) -> Vec<MemSeed> {
     let n = query_alpha.len();
     if min_len == 0 || n == 0 || min_len > n {
         return Vec::new();
@@ -162,19 +158,15 @@ fn dedup_seeds(seeds: &mut Vec<MemSeed>) {
 }
 
 /// 向后兼容的 MEM 种子查找（保留原有接口）
-pub fn find_mem_seeds(
-    fm: &FMIndex,
-    query_alpha: &[u8],
-    min_len: usize,
-) -> Vec<MemSeed> {
+pub fn find_mem_seeds(fm: &FMIndex, query_alpha: &[u8], min_len: usize) -> Vec<MemSeed> {
     find_smem_seeds(fm, query_alpha, min_len)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::index::{bwt, sa};
     use crate::index::fm::{Contig, FMIndex};
+    use crate::index::{bwt, sa};
     use crate::util::dna;
 
     fn build_test_fm(seq: &[u8]) -> FMIndex {
@@ -202,9 +194,7 @@ mod tests {
         let norm = dna::normalize_seq(read);
         let alpha: Vec<u8> = norm.iter().map(|&b| dna::to_alphabet(b)).collect();
         let seeds = find_smem_seeds(&fm, &alpha, 2);
-        assert!(
-            seeds.iter().any(|s| s.contig == 0 && s.qb == 0 && s.qe == 4)
-        );
+        assert!(seeds.iter().any(|s| s.contig == 0 && s.qb == 0 && s.qe == 4));
     }
 
     #[test]
@@ -285,10 +275,7 @@ mod tests {
         // Check no duplicates
         for i in 0..seeds.len() {
             for j in (i + 1)..seeds.len() {
-                assert!(
-                    seeds[i] != seeds[j],
-                    "duplicate seed found at {} and {}", i, j
-                );
+                assert!(seeds[i] != seeds[j], "duplicate seed found at {} and {}", i, j);
             }
         }
     }

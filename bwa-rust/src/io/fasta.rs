@@ -51,10 +51,7 @@ impl<R: BufRead> FastaReader<R> {
         // Parse id and description
         let mut parts = header.splitn(2, char::is_whitespace);
         let id = parts.next().unwrap_or("").to_string();
-        let desc = parts
-            .next()
-            .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty());
+        let desc = parts.next().map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
 
         // Read sequence lines
         let mut seq: Vec<u8> = Vec::new();

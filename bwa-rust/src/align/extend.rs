@@ -1,5 +1,5 @@
 use super::chain::Chain;
-use super::sw::{self, SwParams, SwBuffer};
+use super::sw::{self, SwBuffer, SwParams};
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct ChainAlignResult {
@@ -12,12 +12,7 @@ pub struct ChainAlignResult {
     pub ref_end: usize,
 }
 
-pub fn chain_to_alignment(
-    chain: &Chain,
-    query: &[u8],
-    reference: &[u8],
-    p: SwParams,
-) -> ChainAlignResult {
+pub fn chain_to_alignment(chain: &Chain, query: &[u8], reference: &[u8], p: SwParams) -> ChainAlignResult {
     chain_to_alignment_buf(chain, query, reference, p, &mut SwBuffer::new())
 }
 
@@ -232,7 +227,13 @@ mod tests {
         let p = default_params();
         let chain = Chain {
             contig: 0,
-            seeds: vec![MemSeed { contig: 0, qb: 0, qe: 4, rb: 0, re: 4 }],
+            seeds: vec![MemSeed {
+                contig: 0,
+                qb: 0,
+                qe: 4,
+                rb: 0,
+                re: 4,
+            }],
             score: 4,
         };
         let res = chain_to_alignment(&chain, b"ACGT", b"ACGT", p);
@@ -244,7 +245,11 @@ mod tests {
     #[test]
     fn chain_to_alignment_empty_chain() {
         let p = default_params();
-        let chain = Chain { contig: 0, seeds: vec![], score: 0 };
+        let chain = Chain {
+            contig: 0,
+            seeds: vec![],
+            score: 0,
+        };
         let res = chain_to_alignment(&chain, b"ACGT", b"ACGT", p);
         assert_eq!(res.score, 0);
         assert!(res.cigar.is_empty());
@@ -256,8 +261,20 @@ mod tests {
         let chain = Chain {
             contig: 0,
             seeds: vec![
-                MemSeed { contig: 0, qb: 0, qe: 4, rb: 0, re: 4 },
-                MemSeed { contig: 0, qb: 4, qe: 8, rb: 4, re: 8 },
+                MemSeed {
+                    contig: 0,
+                    qb: 0,
+                    qe: 4,
+                    rb: 0,
+                    re: 4,
+                },
+                MemSeed {
+                    contig: 0,
+                    qb: 4,
+                    qe: 8,
+                    rb: 4,
+                    re: 8,
+                },
             ],
             score: 8,
         };
@@ -275,12 +292,24 @@ mod tests {
         let chain = Chain {
             contig: 0,
             seeds: vec![
-                MemSeed { contig: 0, qb: 0, qe: 4, rb: 0, re: 4 },
-                MemSeed { contig: 0, qb: 6, qe: 10, rb: 6, re: 10 },
+                MemSeed {
+                    contig: 0,
+                    qb: 0,
+                    qe: 4,
+                    rb: 0,
+                    re: 4,
+                },
+                MemSeed {
+                    contig: 0,
+                    qb: 6,
+                    qe: 10,
+                    rb: 6,
+                    re: 10,
+                },
             ],
             score: 8,
         };
-        let query =     b"ACGTXXACGT";
+        let query = b"ACGTXXACGT";
         let reference = b"ACGTXXACGT";
         let res = chain_to_alignment(&chain, query, reference, p);
         assert!(res.score > 0);
@@ -292,9 +321,13 @@ mod tests {
         let p = default_params();
         let chain = Chain {
             contig: 0,
-            seeds: vec![
-                MemSeed { contig: 0, qb: 0, qe: 4, rb: 0, re: 4 },
-            ],
+            seeds: vec![MemSeed {
+                contig: 0,
+                qb: 0,
+                qe: 4,
+                rb: 0,
+                re: 4,
+            }],
             score: 4,
         };
         let query = b"ACGTNNNN";
@@ -309,8 +342,20 @@ mod tests {
         let chain = Chain {
             contig: 0,
             seeds: vec![
-                MemSeed { contig: 0, qb: 0, qe: 3, rb: 0, re: 3 },
-                MemSeed { contig: 0, qb: 3, qe: 6, rb: 3, re: 6 },
+                MemSeed {
+                    contig: 0,
+                    qb: 0,
+                    qe: 3,
+                    rb: 0,
+                    re: 3,
+                },
+                MemSeed {
+                    contig: 0,
+                    qb: 3,
+                    qe: 6,
+                    rb: 3,
+                    re: 6,
+                },
             ],
             score: 6,
         };
@@ -324,10 +369,16 @@ mod tests {
         let p = default_params();
         let chain = Chain {
             contig: 0,
-            seeds: vec![MemSeed { contig: 0, qb: 2, qe: 6, rb: 2, re: 6 }],
+            seeds: vec![MemSeed {
+                contig: 0,
+                qb: 2,
+                qe: 6,
+                rb: 2,
+                re: 6,
+            }],
             score: 4,
         };
-        let query =     b"NNACGTNN";
+        let query = b"NNACGTNN";
         let reference = b"NNACGTNN";
         let res = chain_to_alignment(&chain, query, reference, p);
         assert!(res.score > 0);
