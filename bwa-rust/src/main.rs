@@ -48,6 +48,37 @@ enum Commands {
         #[arg(short = 't', long = "threads", default_value_t = 1)]
         threads: usize,
     },
+    /// BWA-MEM style alignment: build index from FASTA and align FASTQ in one step
+    Mem {
+        /// Reference FASTA file
+        reference: String,
+        /// Reads FASTQ file
+        reads: String,
+        /// Output SAM path (stdout if omitted)
+        #[arg(short, long)]
+        out: Option<String>,
+        /// Match score
+        #[arg(short = 'A', long = "match", default_value_t = 1)]
+        match_score: i32,
+        /// Mismatch penalty
+        #[arg(short = 'B', long = "mismatch", default_value_t = 4)]
+        mismatch_penalty: i32,
+        /// Gap open penalty
+        #[arg(short = 'O', long = "gap-open", default_value_t = 6)]
+        gap_open: i32,
+        /// Gap extension penalty
+        #[arg(short = 'E', long = "gap-ext", default_value_t = 1)]
+        gap_extend: i32,
+        /// Band width for banded SW
+        #[arg(short = 'w', long = "band-width", default_value_t = 100)]
+        band_width: usize,
+        /// Minimum alignment score to output (BWA default: 30, lowered for short reads)
+        #[arg(short = 'T', long = "score-threshold", default_value_t = 10)]
+        score_threshold: i32,
+        /// Number of threads
+        #[arg(short = 't', long = "threads", default_value_t = 1)]
+        threads: usize,
+    },
 }
 
 fn main() -> Result<()> {
@@ -73,9 +104,34 @@ fn main() -> Result<()> {
                 gap_extend,
                 band_width,
                 score_threshold,
+                min_seed_len: 19,
                 threads,
             };
             run_align(&index, &reads, out.as_deref(), opt)
+        }
+        Commands::Mem {
+            reference,
+            reads,
+            out,
+            match_score,
+            mismatch_penalty,
+            gap_open,
+            gap_extend,
+            band_width,
+            score_threshold,
+            threads,
+        } => {
+            let opt = align::AlignOpt {
+                match_score,
+                mismatch_penalty,
+                gap_open,
+                gap_extend,
+                band_width,
+                score_threshold,
+                min_seed_len: 19,
+                threads,
+            };
+            run_mem(&reference, &reads, out.as_deref(), opt)
         }
     }
 }
@@ -140,4 +196,53 @@ fn run_align(
     opt: align::AlignOpt,
 ) -> Result<()> {
     align::align_fastq_with_opt(index_path, reads_path, out_path, opt)
+}
+
+fn run_mem(
+    reference: &str,
+    reads_path: &str,
+    out_path: Option<&str>,
+    opt: align::AlignOpt,
+) -> Result<()> {
+    eprintln!("[bwa-rust mem] Loading reference: {}", reference);
+    let fh = std::fs::File::open(reference)
+        .map_err(|e| anyhow::anyhow!("cannot open reference FASTA '{}': {}", reference, e))?;
+    let buf = std::io::BufReader::new(fh);
+    let mut reader = io::fasta::FastaReader::new(buf);
+
+    let mut n_seqs = 0usize;
+    let mut total_len = 0usize;
+    let mut text: Vec<u8> = Vec::new();
+    let mut contigs: Vec<index::fm::Contig> = Vec::new();
+
+    while let Some(rec) = reader.next_record()? {
+        n_seqs += 1;
+        total_len += rec.seq.len();
+        let norm = util::dna::normalize_seq(&rec.seq);
+        let start = text.len() as u32;
+        for b in norm {
+            text.push(util::dna::to_alphabet(b));
+        }
+        let len_u32 = (text.len() as u32).saturating_sub(start);
+        contigs.push(index::fm::Contig { name: rec.id, len: len_u32, offset: start });
+        text.push(0);
+    }
+
+    if n_seqs == 0 {
+        anyhow::bail!("FASTA file '{}' contains no sequences", reference);
+    }
+    if total_len == 0 {
+        anyhow::bail!("FASTA file '{}' contains only empty sequences", reference);
+    }
+
+    eprintln!("[bwa-rust mem] {} sequences, {} bp total", n_seqs, total_len);
+    eprintln!("[bwa-rust mem] Building FM index...");
+
+    let sa = index::sa::build_sa(&text);
+    let bwt = index::bwt::build_bwt(&text, &sa);
+    let fm = index::fm::FMIndex::build(text, bwt, sa, contigs, util::dna::SIGMA as u8, 512);
+    let fm = std::sync::Arc::new(fm);
+
+    eprintln!("[bwa-rust mem] Aligning reads from: {}", reads_path);
+    align::align_fastq_with_fm_opt(fm, reads_path, out_path, opt)
 }
