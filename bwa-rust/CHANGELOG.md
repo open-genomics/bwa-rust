@@ -30,6 +30,3 @@
   - GitHub Actions CI（fmt、clippy、test、release build）
   - 架构文档、教程、示例代码
 
-### 详细记录
-
-参见 [changelog/v0.1.0.md](changelog/v0.1.0.md)。
