@@ -93,7 +93,9 @@ src/
 
 - [架构文档](docs/architecture.md) — 模块划分、索引格式、算法流程
 - [教程](docs/tutorial.md) — 从 0 实现 BWA 风格对齐器
-- [开发路线图](../ROADMAP.md) — 项目规划与 TODO
+- [全量复刻计划](docs/plan.md) — BWA 全量复刻远景规划（供未来扩展参考）
+- [开发路线图](../ROADMAP.md) — 项目规划（v0.1.0 已完成）
+- [变更日志](CHANGELOG.md) — 版本变更记录
 
 ## 基准测试
 
@@ -126,7 +128,7 @@ cargo build --release
 
 ## 规划
 
-详见 [ROADMAP.md](../ROADMAP.md)。
+v0.1.0 路线图已全部完成，详见 [ROADMAP.md](../ROADMAP.md)。未来展望（配对端、BAM 输出等）见路线图末尾。
 
 ## 贡献
 

@@ -1,5 +1,11 @@
 # Rust 版 BWA 全量实现计划
 
+> **注意**：本文档是 BWA **全量复刻**的远景规划，目标是完整复刻 C 版 BWA 的所有子命令和算法。
+> 这与当前项目的定位不同 — 当前 bwa-rust v0.1.0 是一个"受 BWA 启发"的简化实现，仅支持单端比对。
+> 已完成的 v0.1.0 功能详见 [ROADMAP.md](../../ROADMAP.md) 和 [CHANGELOG.md](../CHANGELOG.md)。
+>
+> 本计划供未来扩展参考，**不代表当前版本的实现范围**。
+
 ## 目标
 1. **CLI 兼容**：复刻 `bwa` 的主要子命令（`index`, `aln/samse/sampe`, `mem`, `bwasw`, `fastmap`, `bwamem`, `bwa` 主程序控制流）。
 2. **核心算法**：按阶段迁移 BWT/FMD 索引、BWA-backtrack、BWA-SW、BWA-MEM（含配对、分段链、局部比对、KSW 扩展等）。
@@ -7,12 +13,12 @@
 4. **一致性验证**：使用原版测试集与 benchmark 确保结果一致或可解释偏差。
 
 ## 当前基线
-- `bwa-rust` 已具备最小化 `index` 与精确匹配 `align` 功能（单读、无错）。
-- 缺失：FMD 索引、压缩 Occ、部分 SA、k-步排序；所有高级子命令和算法。
+- `bwa-rust` v0.1.0 已实现 BWA-MEM 风格的单端比对（SMEM 种子 + 链构建 + 带状 SW + 多线程并行）。
+- 缺失：FMD 双向索引、BWA-backtrack（`aln/samse/sampe`）、BWA-SW（`bwasw`）、配对端支持、BAM 输出。
 
 ## 阶段性路线
 
-### 阶段 0：基准梳理（进行中）
+### 阶段 0：基准梳理
 
 | 模块 | 主要源文件 | 职责 | 关键依赖 |
 | --- | --- | --- | --- |
