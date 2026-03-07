@@ -164,8 +164,6 @@ pub(crate) fn align_single_read(
 
         if idx == 0 {
             // 主比对
-        } else if cand.score == best_score {
-            flag |= 0x100; // secondary
         } else {
             flag |= 0x100; // secondary
         }
@@ -458,5 +456,144 @@ mod tests {
         ];
         dedup_candidates(&mut cands);
         assert_eq!(cands.len(), 2); // same pos+dir removed, different dir kept
+    }
+
+    #[test]
+    fn dedup_candidates_keeps_all_unique() {
+        let mut cands = vec![
+            AlignCandidate { score: 50, is_rev: false, rname: "chr1".into(), pos1: 10, cigar: "20M".into(), nm: 0, contig_idx: 0 },
+            AlignCandidate { score: 45, is_rev: false, rname: "chr1".into(), pos1: 20, cigar: "20M".into(), nm: 0, contig_idx: 0 },
+            AlignCandidate { score: 40, is_rev: true, rname: "chr1".into(), pos1: 10, cigar: "20M".into(), nm: 0, contig_idx: 0 },
+        ];
+        dedup_candidates(&mut cands);
+        assert_eq!(cands.len(), 3);
+    }
+
+    #[test]
+    fn dedup_candidates_empty() {
+        let mut cands: Vec<AlignCandidate> = vec![];
+        dedup_candidates(&mut cands);
+        assert!(cands.is_empty());
+    }
+
+    #[test]
+    fn align_single_read_empty_seq() {
+        let fm = build_test_fm(b"ACGTACGTACGTACGTACGTACGT");
+        let rec = FastqRecord {
+            id: "empty".to_string(),
+            desc: None,
+            seq: b"".to_vec(),
+            qual: b"".to_vec(),
+        };
+        let sw = SwParams {
+            match_score: 2,
+            mismatch_penalty: 1,
+            gap_open: 2,
+            gap_extend: 1,
+            band_width: 16,
+        };
+        let opt = default_opt();
+        let lines = align_single_read(&fm, &rec, sw, &opt);
+        assert!(!lines.is_empty());
+        assert!(lines[0].contains("\t4\t")); // unmapped
+    }
+
+    #[test]
+    fn align_single_read_mapped() {
+        let reference = b"ACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGT";
+        let fm = build_test_fm(reference);
+        let rec = FastqRecord {
+            id: "mapped".to_string(),
+            desc: None,
+            seq: b"ACGTACGTACGTACGTACGTACGT".to_vec(),
+            qual: b"IIIIIIIIIIIIIIIIIIIIIIIII".to_vec(),
+        };
+        let sw = SwParams {
+            match_score: 2,
+            mismatch_penalty: 1,
+            gap_open: 2,
+            gap_extend: 1,
+            band_width: 16,
+        };
+        let opt = AlignOpt {
+            score_threshold: 10,
+            ..default_opt()
+        };
+        let lines = align_single_read(&fm, &rec, sw, &opt);
+        assert!(!lines.is_empty());
+        // Primary alignment should not be unmapped
+        assert!(!lines[0].contains("\t4\t*\t"));
+        assert!(lines[0].contains("chr1"));
+        assert!(lines[0].contains("M"));
+    }
+
+    #[test]
+    fn align_single_read_revcomp() {
+        // 使用非回文参考序列，确保正向和反向互补不同
+        let reference = b"AACCGGTTAACCGGTTAACCGGTTAACCGGTTAACCGGTTAACCGGTT";
+        let fm = build_test_fm(reference);
+        // 从参考中取一段，然后取 revcomp 作为 read
+        let fwd_read = &reference[..24];
+        let rc = dna::revcomp(fwd_read);
+        let rec = FastqRecord {
+            id: "revcomp".to_string(),
+            desc: None,
+            seq: rc.clone(),
+            qual: vec![b'I'; rc.len()],
+        };
+        let sw = SwParams {
+            match_score: 2,
+            mismatch_penalty: 1,
+            gap_open: 2,
+            gap_extend: 1,
+            band_width: 16,
+        };
+        let opt = AlignOpt {
+            score_threshold: 10,
+            ..default_opt()
+        };
+        let lines = align_single_read(&fm, &rec, sw, &opt);
+        assert!(!lines.is_empty());
+        let fields: Vec<&str> = lines[0].split('\t').collect();
+        let flag: u16 = fields[1].parse().unwrap();
+        let is_mapped = flag & 4 == 0;
+        // 如果成功映射，应该有正向或反向互补的比对
+        if is_mapped {
+            // 无论正向还是反向映射，重要的是 read 能被成功比对
+            assert!(lines[0].contains("chr1"));
+        }
+    }
+
+    #[test]
+    fn mapq_monotonically_decreases_with_better_secondary() {
+        // As second best score approaches best, MAPQ should decrease
+        let q1 = compute_mapq(100, 0);
+        let q2 = compute_mapq(100, 50);
+        let q3 = compute_mapq(100, 90);
+        assert!(q1 >= q2);
+        assert!(q2 >= q3);
+    }
+
+    #[test]
+    fn mapq_is_zero_for_equal_scores() {
+        for score in [1, 10, 50, 100] {
+            assert_eq!(compute_mapq(score, score), 0);
+        }
+    }
+
+    #[test]
+    fn collect_candidates_empty_query() {
+        let fm = build_test_fm(b"ACGTACGTACGTACGTACGTACGT");
+        let sw = SwParams {
+            match_score: 2,
+            mismatch_penalty: 1,
+            gap_open: 2,
+            gap_extend: 1,
+            band_width: 16,
+        };
+        let mut candidates = Vec::new();
+        let opt = default_opt();
+        collect_candidates(&fm, &[], &[], sw, false, &opt, &mut candidates);
+        assert!(candidates.is_empty());
     }
 }

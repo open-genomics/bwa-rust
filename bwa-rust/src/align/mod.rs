@@ -282,4 +282,90 @@ mod tests {
         assert_eq!(res.score, 0);
         assert!(res.cigar.is_empty());
     }
+
+    #[test]
+    fn chain_to_alignment_two_adjacent_seeds() {
+        let p = default_params();
+        let chain = Chain {
+            contig: 0,
+            seeds: vec![
+                MemSeed { contig: 0, qb: 0, qe: 4, rb: 0, re: 4 },
+                MemSeed { contig: 0, qb: 4, qe: 8, rb: 4, re: 8 },
+            ],
+            score: 8,
+        };
+        let query = b"ACGTACGT";
+        let reference = b"ACGTACGT";
+        let res = chain_to_alignment(&chain, query, reference, p);
+        assert_eq!(res.score, 16); // 8 bases * match_score(2)
+        assert_eq!(res.cigar, "8M");
+        assert_eq!(res.nm, 0);
+    }
+
+    #[test]
+    fn chain_to_alignment_with_gap_between_seeds() {
+        let p = default_params();
+        let chain = Chain {
+            contig: 0,
+            seeds: vec![
+                MemSeed { contig: 0, qb: 0, qe: 4, rb: 0, re: 4 },
+                MemSeed { contig: 0, qb: 6, qe: 10, rb: 6, re: 10 },
+            ],
+            score: 8,
+        };
+        let query =     b"ACGTXXACGT";
+        let reference = b"ACGTXXACGT";
+        let res = chain_to_alignment(&chain, query, reference, p);
+        assert!(res.score > 0);
+        assert!(res.cigar.contains('M'));
+    }
+
+    #[test]
+    fn chain_to_alignment_with_right_clip() {
+        let p = default_params();
+        let chain = Chain {
+            contig: 0,
+            seeds: vec![
+                MemSeed { contig: 0, qb: 0, qe: 4, rb: 0, re: 4 },
+            ],
+            score: 4,
+        };
+        let query = b"ACGTNNNN";
+        let reference = b"ACGT";
+        let res = chain_to_alignment(&chain, query, reference, p);
+        assert!(res.cigar.contains('S'));
+    }
+
+    #[test]
+    fn push_run_merges_same_ops() {
+        let p = default_params();
+        let chain = Chain {
+            contig: 0,
+            seeds: vec![
+                MemSeed { contig: 0, qb: 0, qe: 3, rb: 0, re: 3 },
+                MemSeed { contig: 0, qb: 3, qe: 6, rb: 3, re: 6 },
+            ],
+            score: 6,
+        };
+        let res = chain_to_alignment(&chain, b"ACGACG", b"ACGACG", p);
+        // Adjacent M seeds should merge into a single run
+        assert_eq!(res.cigar, "6M");
+    }
+
+    #[test]
+    fn chain_to_alignment_result_fields() {
+        let p = default_params();
+        let chain = Chain {
+            contig: 0,
+            seeds: vec![MemSeed { contig: 0, qb: 2, qe: 6, rb: 2, re: 6 }],
+            score: 4,
+        };
+        let query =     b"NNACGTNN";
+        let reference = b"NNACGTNN";
+        let res = chain_to_alignment(&chain, query, reference, p);
+        assert!(res.score > 0);
+        // query_start <= 2, query_end >= 6
+        assert!(res.query_start <= 2);
+        assert!(res.query_end >= 6);
+    }
 }

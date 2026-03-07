@@ -48,6 +48,12 @@ pub struct SwBuffer {
     f: Vec<i32>,
 }
 
+impl Default for SwBuffer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SwBuffer {
     pub fn new() -> Self {
         Self {
@@ -289,8 +295,8 @@ pub fn extend_right(query: &[u8], reference: &[u8], p: SwParams, zdrop: i32) -> 
 
     // 初始化：允许从任何 ref 位置免费开始（半全局：query 从头开始，ref 可从任意位置开始）
     // 这里我们做 query 和 ref 都从 0 开始的全局化延伸（ksw_extend 风格：固定起始端）
-    for j in 0..=n {
-        h[j] = 0;
+    for item in h.iter_mut().take(n + 1) {
+        *item = 0;
     }
 
     let mut best_score = 0i32;
@@ -471,5 +477,134 @@ mod tests {
         assert_eq!(r1.score, 8);
         let r2 = banded_sw_with_buf(b"AGGT", b"ACGT", p, &mut buf);
         assert_eq!(r2.nm, 1);
+    }
+
+    #[test]
+    fn ops_to_cigar_empty() {
+        assert_eq!(ops_to_cigar(&[]), "");
+    }
+
+    #[test]
+    fn ops_to_cigar_single_op() {
+        assert_eq!(ops_to_cigar(&['M']), "1M");
+    }
+
+    #[test]
+    fn ops_to_cigar_run_length() {
+        assert_eq!(ops_to_cigar(&['M', 'M', 'M', 'I', 'M', 'M']), "3M1I2M");
+    }
+
+    #[test]
+    fn ops_to_cigar_all_different() {
+        assert_eq!(ops_to_cigar(&['M', 'I', 'D', 'M']), "1M1I1D1M");
+    }
+
+    #[test]
+    fn parse_cigar_basic() {
+        let parsed = parse_cigar("3M1I2M");
+        assert_eq!(parsed, vec![('M', 3), ('I', 1), ('M', 2)]);
+    }
+
+    #[test]
+    fn parse_cigar_empty() {
+        let parsed = parse_cigar("");
+        assert!(parsed.is_empty());
+    }
+
+    #[test]
+    fn parse_cigar_complex() {
+        let parsed = parse_cigar("10M2D5M1I3M");
+        assert_eq!(parsed, vec![('M', 10), ('D', 2), ('M', 5), ('I', 1), ('M', 3)]);
+    }
+
+    #[test]
+    fn parse_cigar_roundtrip() {
+        let ops = vec!['M', 'M', 'M', 'I', 'D', 'M', 'M'];
+        let cigar = ops_to_cigar(&ops);
+        let parsed = parse_cigar(&cigar);
+        let mut reconstructed = Vec::new();
+        for (op, count) in parsed {
+            for _ in 0..count {
+                reconstructed.push(op);
+            }
+        }
+        assert_eq!(reconstructed, ops);
+    }
+
+    #[test]
+    fn extend_right_perfect_match() {
+        let p = default_params();
+        let res = extend_right(b"ACGT", b"ACGT", p, 100);
+        assert!(res.score > 0);
+        assert_eq!(res.query_len, 4);
+        assert_eq!(res.ref_len, 4);
+        assert_eq!(res.ops.len(), 4);
+        assert!(res.ops.iter().all(|&op| op == 'M'));
+    }
+
+    #[test]
+    fn extend_right_empty_input() {
+        let p = default_params();
+        let res = extend_right(b"", b"ACGT", p, 100);
+        assert_eq!(res.score, 0);
+        assert_eq!(res.query_len, 0);
+        let res2 = extend_right(b"ACGT", b"", p, 100);
+        assert_eq!(res2.score, 0);
+    }
+
+    #[test]
+    fn extend_left_perfect_match() {
+        let p = default_params();
+        let res = extend_left(b"ACGT", b"ACGT", p, 100);
+        assert!(res.score > 0);
+        assert_eq!(res.query_len, 4);
+        assert_eq!(res.ref_len, 4);
+    }
+
+    #[test]
+    fn extend_left_empty_input() {
+        let p = default_params();
+        let res = extend_left(b"", b"ACGT", p, 100);
+        assert_eq!(res.score, 0);
+    }
+
+    #[test]
+    fn sw_all_mismatches() {
+        let p = default_params();
+        let q = b"AAAA";
+        let r = b"TTTT";
+        let res = banded_sw(q, r, p);
+        // With match_score=2, mismatch=-1, score per position = -1
+        // Smith-Waterman local: score should be 0 (all mismatches, local resets to 0)
+        assert_eq!(res.score, 0);
+    }
+
+    #[test]
+    fn sw_longer_sequences() {
+        let p = SwParams {
+            match_score: 1,
+            mismatch_penalty: 4,
+            gap_open: 6,
+            gap_extend: 1,
+            band_width: 100,
+        };
+        let q = b"ACGTACGTACGTACGT";
+        let r = b"ACGTACGTACGTACGT";
+        let res = banded_sw(q, r, p);
+        assert_eq!(res.score, 16);
+        assert_eq!(res.cigar, "16M");
+        assert_eq!(res.nm, 0);
+    }
+
+    #[test]
+    fn sw_partial_match_in_longer_ref() {
+        let p = default_params();
+        let q = b"ACGT";
+        let r = b"TTTTACGTTTTT";
+        let res = banded_sw(q, r, p);
+        assert_eq!(res.score, 8);
+        assert_eq!(res.cigar, "4M");
+        assert_eq!(res.ref_start, 4);
+        assert_eq!(res.ref_end, 8);
     }
 }

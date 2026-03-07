@@ -92,7 +92,7 @@ pub fn find_smem_seeds(
         for sa_pos in fm.sa_interval_positions(*l, *r) {
             if let Some((ci, off)) = fm.map_text_pos(sa_pos) {
                 let seed_len = (qe - qb) as u32;
-                let contig_len = fm.contigs[ci].len as u32;
+                let contig_len = fm.contigs[ci].len;
                 if off + seed_len <= contig_len {
                     seeds.push(MemSeed {
                         contig: ci,
@@ -224,5 +224,78 @@ mod tests {
         assert!(!seeds.is_empty());
         // Should find the full-length match
         assert!(seeds.iter().any(|s| s.qe - s.qb >= 12));
+    }
+
+    #[test]
+    fn smem_empty_query() {
+        let fm = build_test_fm(b"ACGTACGT");
+        let seeds = find_smem_seeds(&fm, &[], 2);
+        assert!(seeds.is_empty());
+    }
+
+    #[test]
+    fn smem_min_len_zero() {
+        let fm = build_test_fm(b"ACGTACGT");
+        let alpha: Vec<u8> = b"ACGT".iter().map(|&b| dna::to_alphabet(b)).collect();
+        let seeds = find_smem_seeds(&fm, &alpha, 0);
+        assert!(seeds.is_empty());
+    }
+
+    #[test]
+    fn smem_min_len_exceeds_query() {
+        let fm = build_test_fm(b"ACGTACGT");
+        let alpha: Vec<u8> = b"AC".iter().map(|&b| dna::to_alphabet(b)).collect();
+        let seeds = find_smem_seeds(&fm, &alpha, 5);
+        assert!(seeds.is_empty());
+    }
+
+    #[test]
+    fn smem_no_match_in_reference() {
+        let fm = build_test_fm(b"AAAAAAAAAAAAAAAA");
+        let alpha: Vec<u8> = b"CCCC".iter().map(|&b| dna::to_alphabet(b)).collect();
+        let seeds = find_smem_seeds(&fm, &alpha, 2);
+        assert!(seeds.is_empty());
+    }
+
+    #[test]
+    fn smem_seeds_have_valid_coordinates() {
+        let fm = build_test_fm(b"ACGTACGTACGTACGTACGT");
+        let read = b"CGTACGT";
+        let norm = dna::normalize_seq(read);
+        let alpha: Vec<u8> = norm.iter().map(|&b| dna::to_alphabet(b)).collect();
+        let seeds = find_smem_seeds(&fm, &alpha, 3);
+        for s in &seeds {
+            assert!(s.qe > s.qb, "seed query end <= begin");
+            assert!(s.re > s.rb, "seed ref end <= begin");
+            assert_eq!(s.qe - s.qb, (s.re - s.rb) as usize, "seed length mismatch");
+            assert!(s.re <= fm.contigs[s.contig].len, "seed exceeds contig");
+        }
+    }
+
+    #[test]
+    fn smem_dedup_removes_exact_duplicates() {
+        let fm = build_test_fm(b"ACGTACGTACGT");
+        let read = b"ACGT";
+        let norm = dna::normalize_seq(read);
+        let alpha: Vec<u8> = norm.iter().map(|&b| dna::to_alphabet(b)).collect();
+        let seeds = find_smem_seeds(&fm, &alpha, 2);
+        // Check no duplicates
+        for i in 0..seeds.len() {
+            for j in (i + 1)..seeds.len() {
+                assert!(
+                    seeds[i] != seeds[j],
+                    "duplicate seed found at {} and {}", i, j
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn find_mem_seeds_same_as_smem() {
+        let fm = build_test_fm(b"ACGTACGTACGT");
+        let alpha: Vec<u8> = b"CGTA".iter().map(|&b| dna::to_alphabet(b)).collect();
+        let seeds1 = find_smem_seeds(&fm, &alpha, 2);
+        let seeds2 = find_mem_seeds(&fm, &alpha, 2);
+        assert_eq!(seeds1, seeds2);
     }
 }

@@ -67,6 +67,7 @@ cargo run --release -- align -i data/toy.fm data/toy_reads.fq -t 4 \
 | [`ROADMAP.md`](ROADMAP.md) | 开发路线图（v0.1.0 已完成） |
 | [`changelog/`](changelog/) | 项目变更记录 |
 | [`bwa-rust/CHANGELOG.md`](bwa-rust/CHANGELOG.md) | 版本变更日志 |
+| [`bwa-rust/VERSIONING.md`](bwa-rust/VERSIONING.md) | 版本策略与演进路线 |
 
 ---
 

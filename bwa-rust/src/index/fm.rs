@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 
-const FM_MAGIC: u64 = 0x424D_4146_4D5F5253; // "BWAFM_RS"
+const FM_MAGIC: u64 = 0x424D_4146_4D5F_5253; // "BWAFM_RS"
 const FM_VERSION: u32 = 2;
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
@@ -111,10 +111,11 @@ impl FMIndex {
             return self.sa[idx];
         }
         let rate = self.sa_sample_rate as usize;
+        let n = self.bwt.len() as u32;
         let mut steps = 0u32;
         loop {
             if idx % rate == 0 {
-                return self.sa[idx / rate] + steps;
+                return (self.sa[idx / rate] + steps) % n;
             }
             // LF-mapping: idx = C[BWT[idx]] + Occ(BWT[idx], idx)
             let ch = self.bwt[idx];
@@ -332,5 +333,109 @@ mod tests {
         let res = fm.backward_search(&[1, 2, 3]).unwrap();
         let positions = fm.sa_interval_positions(res.0, res.1);
         assert_eq!(positions.len(), 2);
+    }
+
+    #[test]
+    fn fm_sparse_sa_roundtrip() {
+        let mut text: Vec<u8> = vec![1, 2, 3, 4, 1, 2, 3, 4, 1, 2];
+        let len = text.len() as u32;
+        let contigs = vec![Contig { name: "s1".to_string(), len, offset: 0 }];
+        text.push(0);
+        let sa_arr = sa::build_sa(&text);
+        let bwt_arr = bwt::build_bwt(&text, &sa_arr);
+        let full_sa = sa_arr.clone();
+        let fm = FMIndex::build_sparse(text.clone(), bwt_arr, sa_arr, contigs, 6, 4, 4);
+        assert_eq!(fm.sa_sample_rate, 4);
+        // Verify sa_value recovers correct positions via LF-mapping
+        for i in 0..full_sa.len() {
+            assert_eq!(fm.sa_value(i), full_sa[i], "sa_value mismatch at i={}", i);
+        }
+    }
+
+    #[test]
+    fn fm_sparse_sa_backward_search() {
+        let mut text: Vec<u8> = vec![1, 2, 3, 4, 1, 2, 3];
+        let len = text.len() as u32;
+        let contigs = vec![Contig { name: "s1".to_string(), len, offset: 0 }];
+        text.push(0);
+        let sa_arr = sa::build_sa(&text);
+        let bwt_arr = bwt::build_bwt(&text, &sa_arr);
+        let fm = FMIndex::build_sparse(text, bwt_arr, sa_arr, contigs, 6, 4, 2);
+        let res = fm.backward_search(&[1, 2, 3]);
+        assert!(res.is_some());
+        let (l, r) = res.unwrap();
+        let positions = fm.sa_interval_positions(l, r);
+        assert_eq!(positions.len(), 2);
+    }
+
+    #[test]
+    fn fm_rank_range_monotonic() {
+        let fm = build_toy_fm(&[1, 2, 3, 4, 1, 2, 3, 4]);
+        let n = fm.bwt.len();
+        for c in 1..fm.sigma {
+            let mut prev_l = 0;
+            for pos in 0..=n {
+                let (nl, _nr) = fm.rank_range(c, 0, pos);
+                assert!(nl >= prev_l, "rank_range not monotonic for c={}, pos={}", c, pos);
+                prev_l = nl;
+            }
+        }
+    }
+
+    #[test]
+    fn fm_backward_search_single_char() {
+        let fm = build_toy_fm(&[1, 2, 3, 4, 1]); // ACGTA
+        for c in 1u8..=4 {
+            let res = fm.backward_search(&[c]);
+            assert!(res.is_some(), "single char {} not found", c);
+        }
+        // N (5) not in text
+        assert!(fm.backward_search(&[5]).is_none());
+    }
+
+    #[test]
+    fn fm_backward_search_full_text() {
+        let text_bytes = vec![1u8, 2, 3, 4];
+        let fm = build_toy_fm(&text_bytes);
+        let res = fm.backward_search(&text_bytes);
+        assert!(res.is_some());
+        let (l, r) = res.unwrap();
+        assert_eq!(r - l, 1);
+    }
+
+    #[test]
+    fn fm_map_text_pos_single_contig() {
+        let fm = build_toy_fm(&[1, 2, 3, 4, 5]);
+        assert_eq!(fm.map_text_pos(0), Some((0, 0)));
+        assert_eq!(fm.map_text_pos(4), Some((0, 4)));
+        assert_eq!(fm.map_text_pos(5), None); // sentinel
+    }
+
+    #[test]
+    fn fm_occ_boundary_values() {
+        let fm = build_toy_fm(&[1, 1, 1, 2, 2, 3]);
+        assert_eq!(fm.occ(1, 0), 0);
+        assert_eq!(fm.occ(1, 1), fm.bwt[..1].iter().filter(|&&b| b == 1).count() as u32);
+        let n = fm.bwt.len();
+        let total_a = fm.bwt.iter().filter(|&&b| b == 1).count() as u32;
+        assert_eq!(fm.occ(1, n), total_a);
+    }
+
+    #[test]
+    fn fm_save_load_with_meta() {
+        let mut fm = build_toy_fm(&[1, 2, 3, 4]);
+        fm.set_meta(IndexMeta {
+            reference_file: Some("test.fa".to_string()),
+            build_args: Some("bwa-rust index test.fa".to_string()),
+            build_timestamp: Some("2025-01-01T00:00:00Z".to_string()),
+        });
+        let tmp = std::env::temp_dir().join("bwa_rust_test_fm_meta.fm");
+        let path = tmp.to_str().unwrap();
+        fm.save_to_file(path).unwrap();
+        let loaded = FMIndex::load_from_file(path).unwrap();
+        let meta = loaded.meta.unwrap();
+        assert_eq!(meta.reference_file.as_deref(), Some("test.fa"));
+        assert_eq!(meta.build_args.as_deref(), Some("bwa-rust index test.fa"));
+        std::fs::remove_file(path).ok();
     }
 }

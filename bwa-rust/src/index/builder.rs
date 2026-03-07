@@ -80,4 +80,71 @@ mod tests {
         let cursor = Cursor::new(&data[..]);
         assert!(build_fm_index(cursor, 4).is_err());
     }
+
+    #[test]
+    fn build_single_seq_fasta() {
+        let data = b">seq1\nACGTACGT\n";
+        let cursor = Cursor::new(&data[..]);
+        let result = build_fm_index(cursor, 4).unwrap();
+        assert_eq!(result.n_seqs, 1);
+        assert_eq!(result.total_len, 8);
+        assert_eq!(result.fm.contigs.len(), 1);
+        assert_eq!(result.fm.contigs[0].name, "seq1");
+        assert_eq!(result.fm.contigs[0].len, 8);
+        assert_eq!(result.fm.contigs[0].offset, 0);
+    }
+
+    #[test]
+    fn build_multi_contig_offsets() {
+        let data = b">c1\nACGT\n>c2\nGGCC\n>c3\nTT\n";
+        let cursor = Cursor::new(&data[..]);
+        let result = build_fm_index(cursor, 4).unwrap();
+        assert_eq!(result.n_seqs, 3);
+        assert_eq!(result.total_len, 10);
+        assert_eq!(result.fm.contigs[0].offset, 0);
+        assert_eq!(result.fm.contigs[0].len, 4);
+        // c2 starts after c1 + sentinel
+        assert_eq!(result.fm.contigs[1].offset, 5);
+        assert_eq!(result.fm.contigs[1].len, 4);
+        // c3 starts after c2 + sentinel
+        assert_eq!(result.fm.contigs[2].offset, 10);
+        assert_eq!(result.fm.contigs[2].len, 2);
+    }
+
+    #[test]
+    fn build_fasta_preserves_sequence_content() {
+        let data = b">chr1\nACGTN\n";
+        let cursor = Cursor::new(&data[..]);
+        let result = build_fm_index(cursor, 4).unwrap();
+        let fm = &result.fm;
+        let offset = fm.contigs[0].offset as usize;
+        let len = fm.contigs[0].len as usize;
+        let recovered: Vec<u8> = fm.text[offset..offset + len]
+            .iter()
+            .map(|&c| dna::from_alphabet(c))
+            .collect();
+        assert_eq!(recovered, b"ACGTN");
+    }
+
+    #[test]
+    fn build_fasta_search_works() {
+        let data = b">chr1\nACGTACGTACGT\n";
+        let cursor = Cursor::new(&data[..]);
+        let result = build_fm_index(cursor, 4).unwrap();
+        let pat: Vec<u8> = b"CGTA".iter().map(|&b| dna::to_alphabet(b)).collect();
+        let res = result.fm.backward_search(&pat);
+        assert!(res.is_some());
+        let (l, r) = res.unwrap();
+        assert_eq!(r - l, 2); // "CGTA" appears twice in ACGTACGTACGT
+    }
+
+    #[test]
+    fn build_fasta_with_lowercase() {
+        let data = b">chr1\nacgtacgt\n";
+        let cursor = Cursor::new(&data[..]);
+        let result = build_fm_index(cursor, 4).unwrap();
+        assert_eq!(result.total_len, 8);
+        let pat: Vec<u8> = b"ACGT".iter().map(|&b| dna::to_alphabet(b)).collect();
+        assert!(result.fm.backward_search(&pat).is_some());
+    }
 }

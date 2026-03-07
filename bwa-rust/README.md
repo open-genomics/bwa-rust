@@ -97,6 +97,55 @@ src/
 - [开发路线图](../ROADMAP.md) — 项目规划（v0.1.0 已完成）
 - [变更日志](CHANGELOG.md) — 版本变更记录
 
+## 测试用例报告
+
+全部 **130** 个测试通过（118 单元测试 + 11 集成测试 + 1 文档测试），0 失败。
+
+```bash
+cargo test
+# test result: ok. 130 passed; 0 failed; 0 ignored
+```
+
+### 单元测试（118 个）
+
+| 模块 | 测试数 | 覆盖范围 |
+|------|--------|----------|
+| `util::dna` | 6 | 碱基归一化、编码/解码往返、互补/反向互补、未知字符映射 |
+| `io::fasta` | 3 | FASTA 解析（基础、CRLF/空白、前导空行） |
+| `io::fastq` | 10 | FASTQ 解析（基础、CRLF、空输入、错误头、缺少+、长度不匹配、截断、多reads、描述、小写） |
+| `io::sam` | 8 | SAM header 格式、unmapped 记录、mapped 记录、空 contig、字段数验证、反向互补 FLAG、次要比对、字符串 contig |
+| `index::sa` | 3 | 后缀数组基础构建、与朴素算法对比、多分隔符处理 |
+| `index::bwt` | 2 | 单 contig BWT、多 contig+分隔符 BWT |
+| `index::fm` | 15 | FM 索引构建、backward search（命中/未命中/单字符/全文）、序列化/反序列化、位置映射、Occ 正确性/边界、SA 区间、稀疏 SA、rank 单调性、元数据 |
+| `index::builder` | 7 | 从 FASTA 构建索引、空输入、单序列、多 contig 偏移、序列内容保存、搜索验证、小写处理 |
+| `align::seed` | 10 | SMEM 种子基础查找、最小长度过滤、长匹配、空查询、零长度、超长度、无匹配、坐标验证、去重、MEM 兼容接口 |
+| `align::chain` | 11 | 链构建（简单对角线、避免重叠/大间距、多链、空种子、单种子、三共线种子、不同 contig、排序）、链过滤（弱链移除、空、非重叠保留）、大间距处理 |
+| `align::sw` | 18 | 带状 SW（完美匹配、单错配、插入、缺失、空输入、全错配、长序列、部分匹配）、缓冲区复用、CIGAR 生成/解析/往返、右扩展/左扩展（正常/空输入） |
+| `align::pipeline` | 13 | MAPQ 模型（单调递减、等分零值）、候选收集（精确/错配/空查询）、候选去重（重复/唯一/空）、单 read 比对（unmapped/空序列/mapped/反向互补）、chain_to_alignment 系列 |
+| `align::mod` | 7 | chain_to_alignment（空链、单种子、双相邻种子、种子间间隙、右侧裁剪、结果字段）、push_run 合并 |
+
+### 集成测试（11 个）
+
+| 测试用例 | 验证内容 |
+|----------|----------|
+| `e2e_build_index_and_exact_search` | FASTA → FM 索引构建 → 多 contig 精确搜索 |
+| `e2e_seed_chain_align_exact` | SMEM 种子 → 链构建/过滤 → SW 对齐（完美匹配） |
+| `e2e_seed_chain_align_with_mismatch` | 含错配 read 的种子-链-对齐全流程 |
+| `e2e_revcomp_alignment` | 反向互补 read 的 SMEM 种子查找 |
+| `e2e_sam_output_format` | SAM header + unmapped/mapped 记录格式完整性 |
+| `e2e_parse_fasta_and_fastq` | FASTA + FASTQ 联合解析一致性 |
+| `e2e_fm_index_serialize_deserialize_search` | FM 索引序列化/反序列化后搜索结果一致 |
+| `e2e_dna_encode_decode_roundtrip` | DNA 编码/解码往返（多种序列模式） |
+| `e2e_dna_revcomp_preserves_length` | 反向互补保持长度 + 双重反向互补恢复 |
+| `e2e_multi_contig_search` | 多 contig 精确搜索 → 位置映射到正确 contig |
+| `e2e_sa_produces_sorted_suffixes` | 后缀数组字典序排列正确性验证 |
+
+### 文档测试（1 个）
+
+| 测试用例 | 验证内容 |
+|----------|----------|
+| `lib.rs` 示例代码 | 库级文档示例编译通过 |
+
 ## 基准测试
 
 ```bash

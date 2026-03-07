@@ -98,7 +98,7 @@ pub fn build_chains(seeds: &[MemSeed], max_gap: usize) -> Vec<Chain> {
     }
 
     let mut chains = Vec::new();
-    for (_, contig_seeds) in &by_contig {
+    for contig_seeds in by_contig.values() {
         // 提取多条链（贪心剥离）
         let mut remaining = contig_seeds.clone();
         for _ in 0..5 {
@@ -232,5 +232,90 @@ mod tests {
         filter_chains(&mut chains, 0.5);
         assert_eq!(chains.len(), 1);
         assert_eq!(chains[0].score, 20);
+    }
+
+    #[test]
+    fn best_chain_empty_seeds() {
+        assert!(best_chain(&[], 10).is_none());
+    }
+
+    #[test]
+    fn best_chain_single_seed() {
+        let seeds = vec![MemSeed { contig: 0, qb: 5, qe: 10, rb: 100, re: 105 }];
+        let chain = best_chain(&seeds, 10).unwrap();
+        assert_eq!(chain.seeds.len(), 1);
+        assert_eq!(chain.score, 5);
+        assert_eq!(chain.contig, 0);
+    }
+
+    #[test]
+    fn best_chain_three_collinear_seeds() {
+        let seeds = vec![
+            MemSeed { contig: 0, qb: 0, qe: 5, rb: 0, re: 5 },
+            MemSeed { contig: 0, qb: 5, qe: 10, rb: 5, re: 10 },
+            MemSeed { contig: 0, qb: 10, qe: 15, rb: 10, re: 15 },
+        ];
+        let chain = best_chain(&seeds, 10).unwrap();
+        assert_eq!(chain.seeds.len(), 3);
+        assert_eq!(chain.score, 15);
+    }
+
+    #[test]
+    fn best_chain_different_contigs() {
+        let seeds = vec![
+            MemSeed { contig: 0, qb: 0, qe: 5, rb: 0, re: 5 },
+            MemSeed { contig: 1, qb: 5, qe: 10, rb: 5, re: 10 },
+        ];
+        let chain = best_chain(&seeds, 10).unwrap();
+        // Seeds on different contigs cannot chain together
+        assert_eq!(chain.seeds.len(), 1);
+        assert_eq!(chain.score, 5);
+    }
+
+    #[test]
+    fn build_chains_empty() {
+        let chains = build_chains(&[], 10);
+        assert!(chains.is_empty());
+    }
+
+    #[test]
+    fn build_chains_sorted_by_score() {
+        let seeds = vec![
+            MemSeed { contig: 0, qb: 0, qe: 10, rb: 0, re: 10 },
+            MemSeed { contig: 0, qb: 0, qe: 3, rb: 100, re: 103 },
+        ];
+        let chains = build_chains(&seeds, 10);
+        assert!(!chains.is_empty());
+        for i in 1..chains.len() {
+            assert!(chains[i].score <= chains[i - 1].score);
+        }
+    }
+
+    #[test]
+    fn filter_chains_empty() {
+        let mut chains = Vec::new();
+        filter_chains(&mut chains, 0.5);
+        assert!(chains.is_empty());
+    }
+
+    #[test]
+    fn filter_chains_keeps_non_overlapping() {
+        let mut chains = vec![
+            Chain { contig: 0, seeds: vec![MemSeed { contig: 0, qb: 0, qe: 10, rb: 0, re: 10 }], score: 10 },
+            Chain { contig: 0, seeds: vec![MemSeed { contig: 0, qb: 20, qe: 30, rb: 20, re: 30 }], score: 10 },
+        ];
+        filter_chains(&mut chains, 0.5);
+        assert_eq!(chains.len(), 2);
+    }
+
+    #[test]
+    fn best_chain_gap_too_large() {
+        let seeds = vec![
+            MemSeed { contig: 0, qb: 0, qe: 5, rb: 0, re: 5 },
+            MemSeed { contig: 0, qb: 100, qe: 105, rb: 100, re: 105 },
+        ];
+        // max_gap = 10, gap between seeds = 95
+        let chain = best_chain(&seeds, 10).unwrap();
+        assert_eq!(chain.seeds.len(), 1); // can't chain across large gap
     }
 }
