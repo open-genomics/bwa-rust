@@ -27,7 +27,6 @@
 │   ├── benches/       #   基准测试
 │   └── README.md      #   详细使用说明
 ├── bwa-0.7.19/        # C 版 BWA 源码（算法参考实现）
-├── changelog/         # 项目变更记录
 ├── ROADMAP.md         # 开发路线图（v0.1.0 已全部完成）
 └── README.md          # 本文件
 ```
@@ -65,7 +64,6 @@ cargo run --release -- align -i data/toy.fm data/toy_reads.fq -t 4 \
 | [`bwa-rust/docs/architecture.md`](bwa-rust/docs/architecture.md) | 模块架构、索引格式、算法流程 |
 | [`bwa-rust/docs/tutorial.md`](bwa-rust/docs/tutorial.md) | 教程：从 0 实现 BWA 风格对齐器 |
 | [`ROADMAP.md`](ROADMAP.md) | 开发路线图（v0.1.0 已完成） |
-| [`changelog/`](changelog/) | 项目变更记录 |
 | [`bwa-rust/CHANGELOG.md`](bwa-rust/CHANGELOG.md) | 版本变更日志 |
 | [`bwa-rust/VERSIONING.md`](bwa-rust/VERSIONING.md) | 版本策略与演进路线 |
 
