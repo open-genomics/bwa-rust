@@ -24,6 +24,7 @@ pub struct AlignOpt {
     pub gap_extend: i32,
     pub band_width: usize,
     pub score_threshold: i32,
+    pub min_seed_len: usize,
     pub threads: usize,
 }
 
@@ -36,6 +37,7 @@ impl Default for AlignOpt {
             gap_extend: 1,
             band_width: 16,
             score_threshold: 20,
+            min_seed_len: 19,
             threads: 1,
         }
     }
@@ -46,6 +48,10 @@ pub struct ChainAlignResult {
     pub score: i32,
     pub cigar: String,
     pub nm: u32,
+    pub query_start: usize,
+    pub query_end: usize,
+    pub ref_start: usize,
+    pub ref_end: usize,
 }
 
 pub fn align_fastq_with_opt(
@@ -55,6 +61,15 @@ pub fn align_fastq_with_opt(
     opt: AlignOpt,
 ) -> Result<()> {
     let fm = Arc::new(FMIndex::load_from_file(index_path)?);
+    align_fastq_with_fm_opt(fm, fastq_path, out_path, opt)
+}
+
+pub fn align_fastq_with_fm_opt(
+    fm: Arc<FMIndex>,
+    fastq_path: &str,
+    out_path: Option<&str>,
+    opt: AlignOpt,
+) -> Result<()> {
 
     let fq = std::fs::File::open(fastq_path)?;
     let mut reader = FastqReader::new(std::io::BufReader::new(fq));
@@ -151,9 +166,9 @@ fn align_single_read(
     let mut all_candidates: Vec<AlignCandidate> = Vec::new();
 
     // 正向对齐候选
-    collect_candidates(fm, &fwd_norm, &fwd_alpha, sw_params, false, &mut all_candidates);
+    collect_candidates(fm, &fwd_norm, &fwd_alpha, sw_params, false, opt, &mut all_candidates);
     // 反向互补对齐候选
-    collect_candidates(fm, &rev_norm, &rev_alpha, sw_params, true, &mut all_candidates);
+    collect_candidates(fm, &rev_norm, &rev_alpha, sw_params, true, opt, &mut all_candidates);
 
     if all_candidates.is_empty() || all_candidates[0].score < opt.score_threshold {
         return vec![format!(
@@ -171,8 +186,13 @@ fn align_single_read(
     dedup_candidates(&mut all_candidates);
 
     let mut sam_lines = Vec::new();
-    let seq_str = String::from_utf8_lossy(seq);
-    let qual_str = String::from_utf8_lossy(qual);
+
+    // 预生成正向和反向互补的 SEQ/QUAL 字符串
+    let seq_fwd = String::from_utf8_lossy(seq).to_string();
+    let qual_fwd = String::from_utf8_lossy(qual).to_string();
+    let rc_seq = dna::revcomp(seq);
+    let seq_rev = String::from_utf8_lossy(&rc_seq).to_string();
+    let qual_rev: String = qual.iter().rev().map(|&b| b as char).collect();
 
     let best_score = all_candidates[0].score;
     let second_best_score = if all_candidates.len() > 1 {
@@ -194,10 +214,8 @@ fn align_single_read(
         if idx == 0 {
             // 主比对
         } else if cand.score == best_score {
-            // 得分相同的次要比对
             flag |= 0x100; // secondary
         } else {
-            // supplementary 或 secondary
             flag |= 0x100; // secondary
         }
 
@@ -213,6 +231,13 @@ fn align_single_read(
             best_score
         };
 
+        // SAM 规范：FLAG 含 0x10 时，SEQ 为原始 read 的反向互补，QUAL 反转
+        let (out_seq, out_qual) = if cand.is_rev {
+            (&seq_rev, &qual_rev)
+        } else {
+            (&seq_fwd, &qual_fwd)
+        };
+
         sam_lines.push(format!(
             "{}\t{}\t{}\t{}\t{}\t{}\t*\t0\t0\t{}\t{}\tAS:i:{}\tXS:i:{}\tNM:i:{}",
             qname,
@@ -221,8 +246,8 @@ fn align_single_read(
             cand.pos1,
             mapq,
             cand.cigar,
-            seq_str,
-            qual_str,
+            out_seq,
+            out_qual,
             cand.score,
             sub_score,
             cand.nm,
@@ -254,6 +279,7 @@ fn collect_candidates(
     query_alpha: &[u8],
     sw_params: SwParams,
     is_rev: bool,
+    opt: &AlignOpt,
     candidates: &mut Vec<AlignCandidate>,
 ) {
     let len = query_alpha.len();
@@ -261,7 +287,8 @@ fn collect_candidates(
         return;
     }
 
-    let min_mem_len = len.min(20).max(1);
+    // BWA 风格：min_seed_len 默认 19，但不超过 read 长度的一半
+    let min_mem_len = opt.min_seed_len.min(len / 2 + 1).max(1);
     let seeds = find_smem_seeds(fm, query_alpha, min_mem_len);
     if seeds.is_empty() {
         return;
@@ -295,13 +322,11 @@ fn collect_candidates(
             continue;
         }
 
-        let rb_min = ch.seeds.iter().map(|s| s.rb).min().unwrap_or(0);
-
         candidates.push(AlignCandidate {
             score: res.score,
             is_rev,
             rname: contig.name.clone(),
-            pos1: rb_min + 1,
+            pos1: (res.ref_start as u32) + 1,
             cigar: res.cigar,
             nm: res.nm,
             contig_idx: ci,
@@ -335,30 +360,30 @@ fn dedup_candidates(candidates: &mut Vec<AlignCandidate>) {
     });
 }
 
-/// 改进的 MAPQ 计算
-/// 基于主次候选得分差和覆盖度估算
+/// BWA 风格的 MAPQ 计算
+/// 参考 BWA mem_approx_mapq_se: mapq = MEM_MAPQ_COEF * (1 - sub/best) * ln(best)
+/// MEM_MAPQ_COEF = 30, MEM_MAPQ_MAX = 60
 fn compute_mapq(best_score: i32, second_best_score: i32) -> u8 {
+    const MAPQ_COEF: f64 = 30.0;
+    const MAPQ_MAX: u8 = 60;
+
     if best_score <= 0 {
         return 0;
     }
-    let diff = (best_score - second_best_score).max(0) as f64;
+
     let best = best_score as f64;
 
-    // 基础 MAPQ：基于得分差占比
-    let ratio = diff / best;
-    let mut q = (ratio * 60.0) as i32;
-
-    // 如果次优分数为 0（唯一比对），给更高 MAPQ
-    if second_best_score <= 0 && best_score > 20 {
-        q = q.max(50);
+    if second_best_score <= 0 {
+        // 唯一比对：q = coef * ln(best)，上限 MAPQ_MAX
+        let q = (MAPQ_COEF * best.ln()).round() as i32;
+        return (q.clamp(0, MAPQ_MAX as i32)) as u8;
     }
 
-    // 如果主次非常接近，降低 MAPQ
-    if diff < 5.0 && second_best_score > 0 {
-        q = q.min(3);
-    }
-
-    q.clamp(0, 60) as u8
+    let sub = second_best_score as f64;
+    let ratio = sub / best;
+    // q = coef * (1 - sub/best) * ln(best)
+    let q = (MAPQ_COEF * (1.0 - ratio) * best.ln()).round() as i32;
+    (q.clamp(0, MAPQ_MAX as i32)) as u8
 }
 
 pub fn chain_to_alignment(
@@ -382,6 +407,10 @@ pub fn chain_to_alignment_buf(
             score: 0,
             cigar: String::new(),
             nm: 0,
+            query_start: 0,
+            query_end: 0,
+            ref_start: 0,
+            ref_end: 0,
         };
     }
 
@@ -391,6 +420,35 @@ pub fn chain_to_alignment_buf(
     let mut ops: Vec<(char, usize)> = Vec::new();
     let mut total_score: i32 = 0;
     let mut total_nm: u32 = 0;
+    let zdrop = 100;
+
+    let first_seed = &seeds[0];
+    let last_seed = &seeds[seeds.len() - 1];
+
+    let mut query_start = first_seed.qb;
+    let mut ref_start = first_seed.rb as usize;
+    let mut query_end = last_seed.qe;
+    let mut ref_end = last_seed.re as usize;
+
+    if first_seed.qb > 0 && first_seed.rb > 0 {
+        let left_q = &query[..first_seed.qb];
+        let ref_left_end = first_seed.rb as usize;
+        let ref_left_span = (left_q.len() + p.band_width + 32).min(ref_left_end);
+        let ref_left_start = ref_left_end - ref_left_span;
+        let left_r = &reference[ref_left_start..ref_left_end];
+        let left_ext = sw::extend_left(left_q, left_r, p, zdrop);
+        if left_ext.score > 0 && !left_ext.ops.is_empty() {
+            push_char_ops(&mut ops, &left_ext.ops);
+            total_score += left_ext.score;
+            total_nm += nm_from_ops(
+                &left_ext.ops,
+                &left_q[left_q.len() - left_ext.query_len..],
+                &left_r[left_r.len() - left_ext.ref_len..],
+            );
+            query_start = first_seed.qb - left_ext.query_len;
+            ref_start = ref_left_end - left_ext.ref_len;
+        }
+    }
 
     let k = seeds.len();
     for idx in 0..k {
@@ -401,27 +459,31 @@ pub fn chain_to_alignment_buf(
             let q_gap_end = curr.qb;
             let r_gap_start = prev_seed.re as usize;
             let r_gap_end = curr.rb as usize;
-            if q_gap_end > q_gap_start && r_gap_end > r_gap_start {
-                if q_gap_end <= query.len() && r_gap_end <= reference.len() {
-                    let q_gap = &query[q_gap_start..q_gap_end];
-                    let r_gap = &reference[r_gap_start..r_gap_end];
-                    let res = sw::banded_sw_with_buf(q_gap, r_gap, p, buf);
-                    if res.score > 0 && !res.cigar.is_empty() {
-                        let parsed = sw::parse_cigar(&res.cigar);
-                        for (op_ch, num) in parsed {
-                            if let Some(last) = ops.last_mut() {
-                                if last.0 == op_ch {
-                                    last.1 += num;
-                                } else {
-                                    ops.push((op_ch, num));
-                                }
-                            } else {
-                                ops.push((op_ch, num));
+            let q_gap_len = q_gap_end.saturating_sub(q_gap_start);
+            let r_gap_len = r_gap_end.saturating_sub(r_gap_start);
+            if q_gap_len > 0 || r_gap_len > 0 {
+                if q_gap_len > 0 && r_gap_len > 0 {
+                    if q_gap_end <= query.len() && r_gap_end <= reference.len() {
+                        let q_gap = &query[q_gap_start..q_gap_end];
+                        let r_gap = &reference[r_gap_start..r_gap_end];
+                        let res = sw::banded_sw_with_buf(q_gap, r_gap, p, buf);
+                        if res.score > 0 && !res.cigar.is_empty() {
+                            let parsed = sw::parse_cigar(&res.cigar);
+                            for (op_ch, num) in parsed {
+                                push_run(&mut ops, op_ch, num);
                             }
+                            total_score += res.score;
+                            total_nm += res.nm;
                         }
-                        total_score += res.score;
-                        total_nm += res.nm;
                     }
+                } else if q_gap_len > 0 {
+                    push_run(&mut ops, 'I', q_gap_len);
+                    total_score -= p.gap_open + p.gap_extend * q_gap_len as i32;
+                    total_nm += q_gap_len as u32;
+                } else {
+                    push_run(&mut ops, 'D', r_gap_len);
+                    total_score -= p.gap_open + p.gap_extend * r_gap_len as i32;
+                    total_nm += r_gap_len as u32;
                 }
             }
         }
@@ -429,17 +491,36 @@ pub fn chain_to_alignment_buf(
         let s = &seeds[idx];
         let len = s.qe - s.qb;
         if len > 0 {
-            if let Some(last) = ops.last_mut() {
-                if last.0 == 'M' {
-                    last.1 += len;
-                } else {
-                    ops.push(('M', len));
-                }
-            } else {
-                ops.push(('M', len));
-            }
+            push_run(&mut ops, 'M', len);
             total_score += (len as i32) * p.match_score;
         }
+    }
+
+    if last_seed.qe < query.len() && (last_seed.re as usize) < reference.len() {
+        let right_q = &query[last_seed.qe..];
+        let ref_right_start = last_seed.re as usize;
+        let ref_right_end = (ref_right_start + right_q.len() + p.band_width + 32).min(reference.len());
+        let right_r = &reference[ref_right_start..ref_right_end];
+        let right_ext = sw::extend_right(right_q, right_r, p, zdrop);
+        if right_ext.score > 0 && !right_ext.ops.is_empty() {
+            push_char_ops(&mut ops, &right_ext.ops);
+            total_score += right_ext.score;
+            total_nm += nm_from_ops(
+                &right_ext.ops,
+                &right_q[..right_ext.query_len],
+                &right_r[..right_ext.ref_len],
+            );
+            query_end = last_seed.qe + right_ext.query_len;
+            ref_end = ref_right_start + right_ext.ref_len;
+        }
+    }
+
+    if query_start > 0 {
+        ops.insert(0, ('S', query_start));
+    }
+    let right_clip = query.len().saturating_sub(query_end);
+    if right_clip > 0 {
+        push_run(&mut ops, 'S', right_clip);
     }
 
     let mut cigar = String::new();
@@ -452,7 +533,57 @@ pub fn chain_to_alignment_buf(
         score: total_score,
         cigar,
         nm: total_nm,
+        query_start,
+        query_end,
+        ref_start,
+        ref_end,
     }
+}
+
+fn push_run(ops: &mut Vec<(char, usize)>, op: char, len: usize) {
+    if len == 0 {
+        return;
+    }
+    if let Some(last) = ops.last_mut() {
+        if last.0 == op {
+            last.1 += len;
+            return;
+        }
+    }
+    ops.push((op, len));
+}
+
+fn push_char_ops(ops: &mut Vec<(char, usize)>, chars: &[char]) {
+    for &op in chars {
+        push_run(ops, op, 1);
+    }
+}
+
+fn nm_from_ops(ops: &[char], query: &[u8], reference: &[u8]) -> u32 {
+    let mut qi = 0usize;
+    let mut ri = 0usize;
+    let mut nm = 0u32;
+    for &op in ops {
+        match op {
+            'M' => {
+                if qi < query.len() && ri < reference.len() && query[qi] != reference[ri] {
+                    nm += 1;
+                }
+                qi += 1;
+                ri += 1;
+            }
+            'I' => {
+                nm += 1;
+                qi += 1;
+            }
+            'D' => {
+                nm += 1;
+                ri += 1;
+            }
+            _ => {}
+        }
+    }
+    nm
 }
 
 #[cfg(test)]
@@ -481,6 +612,7 @@ mod tests {
             gap_extend: 1,
             band_width: 16,
             score_threshold: 20,
+            min_seed_len: 19,
             threads: 1,
         }
     }
@@ -532,13 +664,19 @@ mod tests {
 
     #[test]
     fn mapq_model() {
-        assert_eq!(compute_mapq(50, 0), 60);
+        // 唯一比对：q = 30 * ln(best)，上限 60
+        assert!(compute_mapq(50, 0) > 50);
+        assert!(compute_mapq(100, 0) == 60);
+        // 有次优：q = 30 * (1 - sub/best) * ln(best)
         assert!(compute_mapq(50, 25) > 0);
+        // 相同分数 -> 0
         assert_eq!(compute_mapq(10, 10), 0);
+        assert_eq!(compute_mapq(100, 100), 0);
+        // 无效分数
         assert_eq!(compute_mapq(0, 0), 0);
         assert_eq!(compute_mapq(-5, 0), 0);
-        assert_eq!(compute_mapq(100, 0), 60);
-        assert_eq!(compute_mapq(100, 100), 0);
+        // 唯一比对且分数较高
+        assert!(compute_mapq(30, 0) > 30);
     }
 
     #[test]
@@ -576,7 +714,8 @@ mod tests {
             band_width: 16,
         };
         let mut candidates = Vec::new();
-        collect_candidates(&fm, &norm, &alpha, sw, false, &mut candidates);
+        let opt = default_opt();
+        collect_candidates(&fm, &norm, &alpha, sw, false, &opt, &mut candidates);
         assert!(!candidates.is_empty());
         assert!(candidates[0].score > 0);
         assert!(candidates[0].cigar.contains('M'));
@@ -598,7 +737,8 @@ mod tests {
             band_width: 16,
         };
         let mut candidates = Vec::new();
-        collect_candidates(&fm, &norm, &alpha, sw, false, &mut candidates);
+        let opt = default_opt();
+        collect_candidates(&fm, &norm, &alpha, sw, false, &opt, &mut candidates);
         assert!(!candidates.is_empty());
         assert!(candidates[0].score > 0);
     }
