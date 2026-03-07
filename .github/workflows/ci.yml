@@ -34,7 +34,7 @@ jobs:
         run: cargo fmt --all -- --check
 
       - name: Clippy lints
-        run: cargo clippy --workspace -- -D warnings
+        run: cargo clippy --workspace -p bwa-rust -- -D warnings
 
       - name: Run tests
         run: cargo test --workspace

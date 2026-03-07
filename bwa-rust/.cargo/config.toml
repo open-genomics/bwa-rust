@@ -9,6 +9,12 @@ incremental = true
 # Linux 下使用 mold 链接器（如已安装）加速链接
 # rustflags = ["-C", "link-arg=-fuse-ld=mold"]
 
+[target.x86_64-unknown-linux-musl]
+# musl 静态链接：生成零依赖二进制，可在几乎所有 Linux 发行版上直接运行
+# CI 环境中使用 musl-gcc 作为链接器
+linker = "musl-gcc"
+rustflags = ["-C", "target-feature=+crt-static"]
+
 [target.'cfg(target_os = "windows")']
 # Windows 下默认链接器即可
 
