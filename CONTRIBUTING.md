@@ -26,7 +26,7 @@
 ```bash
 # 克隆项目
 git clone https://github.com/LessUp/bwa-rust.git
-cd bwa-rust/bwa-rust
+cd bwa-rust
 
 # 构建
 cargo build

@@ -1,6 +1,56 @@
-[workspace]
-members = ["bwa-rust"]
-resolver = "2"
+[package]
+name = "bwa-rust"
+version = "0.1.0"
+edition = "2021"
+authors = ["LessUp"]
+description = "A BWA-inspired sequence aligner implemented in Rust, featuring FM-index, SMEM seeding, and banded Smith-Waterman alignment"
+license = "MIT"
+repository = "https://github.com/LessUp/bwa-rust"
+homepage = "https://github.com/LessUp/bwa-rust"
+readme = "README.md"
+keywords = ["bioinformatics", "bwa", "alignment", "fm-index", "genomics"]
+categories = ["science", "command-line-utilities"]
+rust-version = "1.70"
+
+# ── 依赖 ──────────────────────────────────────────────
+
+[dependencies]
+anyhow = "1.0"
+clap = { version = "4.5", features = ["derive"] }
+serde = { version = "1.0", features = ["derive"] }
+bincode = "1.3"
+chrono = "0.4"
+rayon = "1.10"
+
+# jemalloc：替换默认 allocator，补回 musl malloc 性能差距，多线程场景显著提升
+# 仅在非 Windows 平台启用（Linux glibc/musl + macOS）
+[target.'cfg(not(target_env = "msvc"))'.dependencies]
+tikv-jemallocator = "0.6"
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+
+[[bench]]
+name = "benchmarks"
+harness = false
+
+# ── Lint 配置 ─────────────────────────────────────────
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+needless_collect = "warn"
+manual_memcpy = "warn"
+large_enum_variant = "warn"
+clone_on_ref_ptr = "warn"
+redundant_closure_for_method_calls = "warn"
+semicolon_if_nothing_returned = "warn"
+cast_possible_truncation = "allow"
+cast_sign_loss = "allow"
+cast_precision_loss = "allow"
+too_many_arguments = "allow"
+module_name_repetitions = "allow"
 
 # ── Profile 优化 ──────────────────────────────────────
 

@@ -71,10 +71,10 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: ${{ runner.os }}-${{ matrix.target }}-cargo-${{ hashFiles('bwa-rust/Cargo.lock') }}
+          key: ${{ runner.os }}-${{ matrix.target }}-cargo-${{ hashFiles('Cargo.lock') }}
 
       - name: Build release binary
-        run: cargo build --release --target ${{ matrix.target }} -p bwa-rust
+        run: cargo build --release --target ${{ matrix.target }}
 
       # 验证 musl 二进制确实是静态链接的
       - name: Verify static linking (Linux musl only)

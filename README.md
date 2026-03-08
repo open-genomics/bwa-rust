@@ -1,45 +1,37 @@
 # bwa-rust
 
 [![CI](https://github.com/LessUp/bwa-rust/actions/workflows/ci.yml/badge.svg)](https://github.com/LessUp/bwa-rust/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](bwa-rust/LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Rust](https://img.shields.io/badge/rust-1.70%2B-orange.svg)](https://www.rust-lang.org/)
 
-**bwa-rust** 是一个受 [BWA](https://github.com/lh3/bwa) 启发的 **Rust 版 DNA 序列比对器**。本项目在整体结构和算法思想上接近 BWA/BWA-MEM，但**不追求与 C 版 BWA 100% 行为兼容**（索引格式、MAPQ 模型等允许不同）。
+受 [BWA](https://github.com/lh3/bwa) 启发的 Rust 版序列比对器。本项目在整体结构和算法思想上接近 BWA/BWA-MEM，但**不追求与 C 版 BWA 100% 行为兼容**（命令行选项、索引格式、MAPQ 细节等允许不同）。
 
-### 核心特性
+## 已实现功能
 
-- **FM 索引构建**：后缀数组 + BWT + 稀疏 SA 采样，序列化为单一 `.fm` 文件
-- **BWA-MEM 风格比对**：SMEM 种子查找 → 种子链构建与过滤 → 带状仿射间隙 Smith-Waterman 局部对齐
-- **标准 SAM 输出**：含 CIGAR、MAPQ、AS/XS/NM 标签、主/次要比对 FLAG
-- **多线程并行**：基于 rayon 的 reads 级并行处理
+### 索引构建（`index` 子命令）
+- 读取 FASTA 参考序列（支持多 contig、不同换行符、非标准字符过滤）
+- 基于倍增法构建后缀数组（SA）
+- 从 SA 构建 BWT
+- 构建 FM 索引（含 C 表、分块 Occ 采样、稀疏 SA 采样支持）
+- 序列化索引到 `.fm` 文件（含 magic number、版本号、构建元数据）
 
----
+### 序列比对（`align` 子命令）
+- 加载 `.fm` 索引
+- 读取 FASTQ reads
+- SMEM 种子查找（超级最大精确匹配）+ 多链构建与过滤
+- 带状仿射间隙 Smith-Waterman 局部对齐（支持错配、插入、缺失）
+- 正向 / 反向互补双向比对
+- 多链候选去重、主/次要比对输出（primary / secondary FLAG）
+- 改进的 MAPQ 估算（基于主次候选得分差）
+- 输出 SAM 格式（含 @HD/@SQ/@PG header，CIGAR、MAPQ、AS/XS/NM 标签）
+- 未比对 reads 标记为 unmapped（FLAG=4）
+- **多线程并行**：通过 `--threads` 参数使用 rayon 并行处理
 
-## 仓库结构
-
-```
-.
-├── Cargo.toml         # Cargo workspace 根配置
-├── .github/           # GitHub CI / Issue 模板 / PR 模板
-├── bwa-rust/          # Rust 版比对器（workspace 成员）
-│   ├── src/           #   源代码
-│   ├── docs/          #   架构文档、教程
-│   ├── data/          #   测试数据（toy.fa / toy_reads.fq）
-│   ├── examples/      #   示例代码
-│   ├── benches/       #   基准测试
-│   ├── tests/         #   集成测试
-│   ├── scripts/       #   开发脚本
-│   └── README.md      #   详细使用说明
-├── bwa-0.7.19/        # C 版 BWA 源码（算法参考实现）
-├── ROADMAP.md         # 开发路线图（v0.1.0 已全部完成）
-└── README.md          # 本文件
-```
-
----
+### 支持/不支持
+- **支持**：单端 reads 对齐
+- **不支持**：配对端（PE）对齐（未来可扩展）
 
 ## 快速开始
-
-进入 `bwa-rust/` 目录后：
 
 ```bash
 # 构建
@@ -48,39 +40,115 @@ cargo build --release
 # 构建索引
 cargo run --release -- index data/toy.fa -o data/toy
 
-# 对齐 reads（SMEM + SW 局部对齐，输出 SAM）
+# 对齐 reads
 cargo run --release -- align -i data/toy.fm data/toy_reads.fq
 
-# 多线程 + 自定义打分参数
-cargo run --release -- align -i data/toy.fm data/toy_reads.fq -t 4 \
-    --match 2 --mismatch 1 --gap-open 2 --gap-ext 1
+# 输出到文件
+cargo run --release -- align -i data/toy.fm data/toy_reads.fq -o output.sam
+
+# 多线程对齐
+cargo run --release -- align -i data/toy.fm data/toy_reads.fq -t 4
+
+# 自定义比对参数
+cargo run --release -- align -i data/toy.fm data/toy_reads.fq \
+    --match 2 --mismatch 1 --gap-open 2 --gap-ext 1 --band-width 16
 ```
 
-更详细的使用说明见 [`bwa-rust/README.md`](bwa-rust/README.md)。
+## 索引构建与索引格式简介
 
----
+`index` 子命令接受一个 FASTA 文件，执行以下步骤：
+
+1. **读取参考序列**：逐条解析 FASTA 记录，将碱基归一化为 `{A,C,G,T,N}`。
+2. **编码为数值字母表**：`{0:$, 1:A, 2:C, 3:G, 4:T, 5:N}`，contig 之间用 `$`（0）分隔。
+3. **构建后缀数组**：使用倍增法（O(n log²n)）排序所有后缀。
+4. **构建 BWT**：从 SA 直接推导 Burrows-Wheeler 变换。
+5. **构建 FM 索引**：计算 C 表和分块 Occ 采样表，保存 SA 用于位置查询（支持稀疏采样）。
+6. **序列化**：使用 bincode 将整个 `FMIndex` 结构写入 `.fm` 文件。
+
+索引文件包含 magic number（`BWAFM_RS`）和版本号（v2），用于格式兼容性检查。可选的构建元数据记录参考文件名、命令参数和时间戳。
+
+## 项目结构
+
+```
+.
+├── Cargo.toml           # 包配置 + 依赖 + profile
+├── .github/             # GitHub CI / Issue 模板 / PR 模板
+├── src/
+│   ├── main.rs          # CLI 入口（clap）
+│   ├── lib.rs           # Library 入口
+│   ├── error.rs         # 自定义错误类型（BwaError / BwaResult）
+│   ├── io/              # FASTA/FASTQ 解析、SAM 输出
+│   ├── index/           # FM 索引（SA、BWT、FM、Builder）
+│   ├── align/           # 对齐算法（SMEM、Chain、SW、Pipeline）
+│   └── util/            # DNA 编码/解码/反向互补
+├── tests/               # 集成测试
+├── benches/             # 基准测试
+├── examples/            # 示例代码
+├── data/                # 测试数据（toy.fa / toy_reads.fq）
+├── docs/                # 架构文档、教程、全量复刻计划
+├── scripts/             # 开发脚本
+├── ROADMAP.md           # 开发路线图（v0.1.0 已完成）
+├── CHANGELOG.md         # 版本变更日志
+├── CONTRIBUTING.md      # 贡献指南
+└── README.md            # 本文件
+```
 
 ## 文档
 
 | 文档 | 说明 |
 |------|------|
-| [`bwa-rust/README.md`](bwa-rust/README.md) | 使用说明、安装、项目结构 |
-| [`bwa-rust/docs/architecture.md`](bwa-rust/docs/architecture.md) | 模块架构、索引格式、算法流程 |
-| [`bwa-rust/docs/tutorial.md`](bwa-rust/docs/tutorial.md) | 教程：从 0 实现 BWA 风格对齐器 |
-| [`ROADMAP.md`](ROADMAP.md) | 开发路线图（v0.1.0 已完成） |
-| [`bwa-rust/CHANGELOG.md`](bwa-rust/CHANGELOG.md) | 版本变更日志 |
-| [`bwa-rust/VERSIONING.md`](bwa-rust/VERSIONING.md) | 版本策略与演进路线 |
+| [`docs/architecture.md`](docs/architecture.md) | 模块架构、索引格式、算法流程 |
+| [`docs/tutorial.md`](docs/tutorial.md) | 教程：从 0 实现 BWA 风格对齐器 |
+| [`docs/plan.md`](docs/plan.md) | BWA 全量复刻远景规划（供未来扩展参考） |
+| [`ROADMAP.md`](ROADMAP.md) | 开发路线图、未来展望、版本策略 |
+| [`CHANGELOG.md`](CHANGELOG.md) | 版本变更日志 |
 
----
+## 测试用例报告
 
-## 开发与贡献
+全部 **133** 个测试通过（121 单元测试 + 11 集成测试 + 1 文档测试），0 失败。
 
-- 开发主要集中在 `bwa-rust/` 目录，详见 [`CONTRIBUTING.md`](bwa-rust/CONTRIBUTING.md)
-- `ROADMAP.md` 记录了完整的开发阶段与任务清单
-- `bwa-0.7.19/` 内含 C 版 BWA 源码，可作为算法与数据结构的参考
+```bash
+cargo test
+# test result: ok. 133 passed; 0 failed; 0 ignored
+```
 
----
+## 安装
+
+### 从源码构建
+
+```bash
+git clone https://github.com/LessUp/bwa-rust.git
+cd bwa-rust
+cargo build --release
+```
+
+编译后的二进制文件位于 `target/release/bwa-rust`。
+
+### 系统要求
+
+- **Rust** 1.70 或更高版本
+- 支持 Linux、macOS、Windows
+
+## 基准测试
+
+```bash
+cargo bench
+```
+
+## 示例
+
+```bash
+cargo run --example simple_align
+```
+
+## 规划
+
+v0.1.0 路线图已全部完成，详见 [ROADMAP.md](ROADMAP.md)。未来展望（配对端、BAM 输出等）见路线图末尾。
+
+## 贡献
+
+欢迎贡献！请阅读 [CONTRIBUTING.md](CONTRIBUTING.md) 了解详情。
 
 ## 许可证
 
-本项目采用 [MIT 许可证](bwa-rust/LICENSE) 发布。
+本项目采用 [MIT 许可证](LICENSE) 发布。

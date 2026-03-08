@@ -1,311 +1,21 @@
-# Rust BWA-inspired Aligner Roadmap
+# Roadmap
 
-> **状态：v0.1.0 — 所有阶段（0–5）已完成** ✅
->
-> 本路线图记录了 bwa-rust 从项目基线到 BWA-MEM 风格单端比对器的完整开发历程。所有规划任务均已在 v0.1.0 中实现并通过测试。
+> **当前版本：v0.1.0** — 单端 BWA-MEM 风格比对器，所有规划任务已完成。
 
 ## 项目目标
 
 实现一个**受 BWA 启发的 Rust 版序列比对器**，在整体结构和算法思想上接近 BWA/BWA-MEM，但**不追求 100% 行为兼容**（命令行选项、索引格式、MAPQ 细节等允许不同）。
 
-## 已实现功能概览
-
-- **索引构建**：FASTA → 后缀数组 → BWT → FM 索引（含稀疏 SA 采样），序列化为 `.fm` 文件
-- **BWA-MEM 风格比对**：SMEM 种子查找 → 种子链构建与过滤 → 带状仿射间隙 Smith-Waterman 局部对齐
-- **SAM 输出**：含 @HD/@SQ/@PG header、CIGAR、MAPQ、AS/XS/NM 标签、主/次要比对 FLAG
-- **多线程并行**：rayon reads 级并行 + `--threads` 参数
-- **工程化**：criterion 基准测试、GitHub Actions CI、架构文档、教程、示例代码
-
-以下是按阶段划分的详细任务清单。
-
----
-
-## 阶段 0：项目基线与参考数据
-
-**目标：** 固定项目目标与范围，准备用于回归测试和对比的基础数据与脚本。
-
-- [x] 明确项目目标与范围
-  - [x] 在 `bwa-rust/README.md` 中补充：
-    - [x] 明确说明：本项目是"受 BWA 启发的 Rust 实现"，**不追求与 C 版 BWA 完全兼容**。
-    - [x] 描述当前已实现的功能（index + 精确匹配 align）。
-
-- [x] 准备测试/参考数据集
-  - [x] 在仓库中创建 `data/` 目录（或其它你喜欢的路径），加入：
-    - [x] 小型参考序列 `toy.fa`（例如几个小 contig，总长度几万 bp）。
-    - [x] 对应的 reads FASTQ，如 `toy_reads.fq`（覆盖匹配、错配、indel 等情况）。
-  - [x] 使用 C 版 BWA 生成基准结果（可手工在 README 或单独文档中记录命令）：
-    - [x] `bwa index toy.fa`
-    - [x] `bwa mem toy.fa toy_reads.fq > toy_bwa_mem.sam`
-
-- [x] 构建基础开发脚本（可选，但有利于长期维护）
-  - [x] 在 `scripts/` 目录下添加：
-    - [x] `run_index.sh`：包装 `cargo run --bin bwa-rust -- index ...`。
-    - [x] `run_align.sh`：包装 `cargo run --bin bwa-rust -- align ...`。
-    - [x] `compare.sh`（可选）：
-      - [x] 调用原版 `bwa mem` 与 `bwa-rust align`，简单比较 mapped/unmapped 数量或用于手动 diff SAM。
-
----
-
-## 阶段 1：索引模块稳定化（Index / FMIndex）
-
-**目标：** 让 `index` 子命令和索引结构（FMIndex）在语义和实现上足够稳定，便于后续对齐模块在其基础上持续演进。
-
-### 1.1 FASTA 读取与 DNA 编码的健壮性
-
-- [x] 为 `io::fasta::FastaReader` 增强测试用例
-  - [x] 多 contig FASTA（带/不带描述行），验证 `id`、`desc`、`seq` 是否正确。
-  - [x] 不同换行符（\n/\r\n）情况。
-  - [x] 中间穿插空行或非标准字符时的行为（是否被正确过滤或转换）。
-
-- [x] 为 `util::dna` 模块增加单元测试
-  - [x] `normalize_seq`：
-    - [x] A/C/G/T/U/N 的归一化逻辑正确；
-    - [x] 其它字符被映射为 N。
-  - [x] `to_alphabet` / `from_alphabet`：
-    - [x] 测试 round-trip：`from_alphabet(to_alphabet(base))` 结果合理；
-    - [x] 覆盖 `{0:$, 1:A, 2:C, 3:G, 4:T, 5:N}` 的映射关系。
-  - [x] `revcomp`：
-    - [x] 测试 `revcomp(revcomp(seq)) == seq`（对只含 A/C/G/T/N 的序列）。
-
-### 1.2 FMIndex 结构与序列化设计
-
-- [x] 明确定义 FM 索引的文件格式
-  - [x] 在 `index::fm::FMIndex` 中新增：
-    - [x] 索引版本或 magic 字段，用于未来格式升级时做兼容性检查。
-    - [x] 可选的元数据结构（如构建时参考文件名、命令行参数、构建时间戳等）。
-  - [x] 在 `README.md` 或 `docs/` 中简单记录 `.fm` 文件格式（高层说明即可）。
-
-- [x] 为 `FMIndex::build/save_to_file/load_from_file` 添加测试
-  - [x] 使用小型 toy 文本：
-    - [x] 构建 FM 索引；
-    - [x] 序列化到文件；
-    - [x] 再从文件加载，验证关键字段是否一致（`sigma/block/c/bwt/sa/contigs`）。
-
-### 1.3 后缀数组（SA）与 BWT 的正确性
-
-- [x] 为 `index::sa::build_sa` 增强测试
-  - [x] 针对少量人工构造的文本验证输出顺序（已存在的基本测试可拓展）。
-  - [x] 在测试环境下实现一个朴素 O(n² log n) SA 构造，用它来验证当前倍增算法对随机文本的正确性。
-
-- [x] 为 `index::bwt::build_bwt` 增强测试
-  - [x] 验证单 contig 文本生成的 BWT 是否符合预期；
-  - [x] 验证包含多个 `$` 分隔符（多 contig）的文本也能正确构建 BWT。
-
-### 1.4 CLI 与错误处理
-
-- [x] 改进 `run_index` 的健壮性
-  - [x] 当输入 FASTA 为空或非常短时，给出明确错误或警告。
-  - [x] 当输出路径不可写时，返回清晰的错误信息（anyhow 上报）。
-
-- [x] 文档
-  - [x] 在 `bwa-rust/README.md` 中增加一个"索引构建与索引格式简介"小节。
-
----
-
-## 阶段 2：对齐 MVP 增强（从精确匹配到"带错配的局部对齐"）
-
-**目标：** 将当前"整条 read 精确匹配"的 MVP，提升为"允许一定错配/小 indel 的局部对齐"，输出带 CIGAR 的合理 SAM 行，为后续 BWA-MEM 风格算法打基础。
-
-### 2.1 抽象对齐配置结构
-
-- [x] 在 `align` 模块中定义 `AlignOpt`（或类似）结构
-  - [x] 字段示例：
-    - [x] `match_score`、`mismatch_penalty`；
-    - [x] `gap_open`、`gap_extend`；
-    - [x] `band_width`（带状 SW 的带宽）；
-    - [x] `max_mismatch` 或 `score_threshold` 等简化配置。
-
-- [x] 将 CLI 与 `AlignOpt` 关联
-  - [x] 在 `Commands::Align` 中增加可选参数：
-    - [x] `--match` / `--mismatch`；
-    - [x] `--gap-open` / `--gap-ext`；
-    - [x] `--band-width`；
-  - [x] 在 `run_align` 中解析这些参数并传入 `align_fastq` 或新的对齐入口函数。
-
-### 2.2 从精确匹配扩展到"种子 + 简单局部 SW"
-
-- [x] FM 索引中增加位置获取能力
-  - [x] 在 `FMIndex` 中新增方法：
-    - [x] 从 `[l, r)` 区间返回**所有** SA 位置（而不仅仅是第一个），用于生成多个候选位置。
-
-- [x] 在 `align` 模块中实现"种子 + 局部 DP"流程（简化版）
-  - [x] 设计简单的种子策略：
-    - [x] 将 read 分成一定长度的固定种子（例如 20–32bp），或滑窗选取若干种子。
-    - [x] 对每个种子使用 FM index 执行 exact backward search，得到候选区间 `[l, r)`。
-    - [x] 展开到若干具体候选位置（`sa_interval_positions`）。
-  - [x] 对每个候选位置周围参考片段执行带状 SW：
-    - [x] 提取参考上 `[pos - L, pos + read_len + L]` 的窗口（注意边界）。
-    - [x] 在 `align` 模块内实现一个简化版 SW 或 NW（带状矩阵即可）。
-    - [x] 输出对齐得分、CIGAR 和 edit distance（NM）。
-  - [x] 在所有候选中选取得分最高的一条作为最终比对结果。
-
-### 2.3 更新 `align_fastq` 输出逻辑
-
-- [x] 替换当前的"整条 forward/backward 精确匹配"逻辑
-  - [x] 对每条 read：
-    - [x] 同时尝试正向和反向互补方向（前处理同当前实现）。
-    - [x] 使用上述"种子 + 局部 SW"流程得到 1 个或多个候选对齐；
-    - [x] 选择得分最高者，生成包含：
-      - [x] FLAG（0 或 16）；
-      - [x] RNAME、POS（1-based）、MAPQ（暂时可用简单函数估计）；
-      - [x] CIGAR（含 M/I/D）；
-      - [x] NM Tag（可选，使用 edit distance）。
-  - [x] 若所有候选得分都低于阈值，则按 unmapped 输出（保留现有 FLAG 4 行）。
-
-- [x] 为增强后的 MVP 写测试
-  - [x] 人工构造小参考和读段，验证：
-    - [x] 有简单错配/插入/缺失时，是否能找到合理对齐；
-    - [x] CIGAR 与 POS 是否符合预期。
-
----
-
-## 阶段 3：BWA-MEM 风格的单端对齐
-
-**目标：** 借鉴 BWA-MEM 的整体流程：MEM/SMEM 种子 → 种子链 → 局部扩展 → 主/次比对，形成更智能的单端对齐算法。
-
-### 3.1 MEM / SMEM 种子查找
-
-- [x] 设计 Rust 版种子/对齐区域结构
-  - [x] 类似 `bwamem.h` 中的 `mem_alnreg_t` 等：
-    - [x] 包含 read 区间 `[qb, qe)`、参考区间 `[rb, re)`、得分等信息。
-
-- [x] 在 FM index 基础上实现 SMEM/MEM 搜索
-  - [x] 在新的模块（可为 `align::seed` 或 `index::mem`）中实现：
-    - [x] 对 read 的每个位置，寻找覆盖该位置的最长匹配（MEM/SMEM）。
-    - [x] 借鉴 BWA 中 `bwt_smem1/bwt_smem1a` 的思想，但不要求一字不差。
-  - [x] 形成一组 MEM 种子集合（包含参考位置和 read 上的位置）。
-
-### 3.2 种子链构建与过滤
-
-- [x] 实现类似 `mem_chain` 的链构建
-  - [x] 将种子看成二维平面上的点（read 坐标 vs ref 坐标）。
-  - [x] 按某种贪心或 DP 策略选取覆盖度高、间距合理的一条或多条链。
-
-- [x] 过滤和去重
-  - [x] 类似 `mem_chain_flt`，根据：
-    - [x] 链的总种子长度/覆盖度；
-    - [x] 与其他链的重叠情况；
-    过滤掉弱链和冗余链。
-
-### 3.3 从链到完整对齐
-
-- [x] 沿链做 DP 扩展与 CIGAR 合并
-  - [x] 在链的各段之间执行局部 SW（可复用阶段 2 的 DP 实现）。
-  - [x] 合并得到完整 CIGAR、对齐得分、edit distance 等。
-
-- [x] 去重与排序
-  - [x] 类似 BWA 的 `mem_sort_dedup_patch`：
-    - [x] 对所有候选按得分、覆盖、位置排序；
-    - [x] 去除几乎完全重复的结果；
-    - [x] 标记主/次/补充比对。
-
-### 3.4 输出与简单 MAPQ 策略
-
-- [x] 设计一个简化 MAPQ 模型
-  - [x] 基于主次候选得分差、覆盖度等信息估算 MAPQ。
-  - [x] 不必完全模仿 BWA 的公式，但行为要合理：
-    - [x] 顶级结果明显好于次级结果时给较高 MAPQ；
-    - [x] 有多个相近候选时降低 MAPQ。
-
-- [x] `align_fastq` 输出多条 SAM 行时：
-  - [x] 正确设置 FLAG：
-    - [x] 主对齐：正常 FLAG；
-    - [x] supplementary / secondary 对齐：设置对应比特。
-  - [x] 可选输出 `AS`（对齐分数）、`XS`（次优分数）、`NM`（edit distance）等标签。
-
----
-
-## 阶段 4：性能优化与工程化
-
-**目标：** 在功能基本稳定的基础上优化性能、提升并行能力，并完善工程实践（测试、CI 等）。
-
-### 4.1 基准测试与 Profiling
-
-- [x] 使用 toy 数据和更大一些的测试集，对比：
-  - [x] 原版 BWA 与 `bwa-rust` 的运行时间与内存消耗（定性即可）。
-- [x] 使用 `criterion` 或 `cargo bench` 编写基准：
-  - [x] `FMIndex::backward_search`；
-  - [x] 种子查找（MEM/SMEM）函数；
-  - [x] DP 扩展函数；
-  - [x] 整体 `align_fastq` 流程。
-
-### 4.2 多线程支持
-
-- [x] 为 `Align` 子命令增加 `--threads` 参数
-  - [x] 默认 1 线程，用户可设置为 N。
-
-- [x] 使用 Rayon 或自定义线程池实现 reads 级并行
-  - [x] 确保 FM index 为只读，在多线程下安全共享；
-  - [x] 控制内存占用（避免为每个线程复制大块结构）。
-
-- [x] SAM 输出顺序与同步
-  - [x] 保证在多线程情况下，输出顺序可控：
-    - [x] 默认保持输入 order；或
-    - [x] 提供 `--keep-order` 开关。
-
-### 4.3 内存与数据结构优化
-
-- [x] 优化 FM index 的存储形式
-  - [x] 考虑稀疏 SA 采样，减少内存使用；
-  - [x] 更高效的 Occ 采样/压缩结构。
-
-- [x] 优化 DP 实现
-  - [x] 使用带状矩阵，减少空间复杂度；
-  - [x] 复用工作缓冲区，避免频繁分配。
-
----
-
-## 阶段 5：文档、示例与长期维护
-
-**目标：** 让项目更易于理解和使用，支持长期维护和迭代。
-
-### 5.1 文档
-
-- [x] 在 `docs/architecture.md` 中描述整体架构
-  - [x] 模块划分：IO / Index / Align / Util；
-  - [x] 索引格式、对齐算法流程图；
-  - [x] 与 BWA/BWA-MEM 的主要差异与借鉴点。
-
-- [x] 完善 `bwa-rust/README.md`
-  - [x] 给出从 `index` 到 `align` 的完整示例；
-  - [x] 说明支持/不支持的功能（例如：目前仅支持单端 vs 未来支持 PE）。
-
-### 5.2 示例与教程
-
-- [x] 添加 `examples/` 目录
-  - [x] `simple_align.rs`：演示如何在 library 模式下：
-    - [x] 加载 FM index；
-    - [x] 调用对齐 API 返回结构化结果；
-    - [x] 不通过 CLI 而是直接在代码中使用。
-
-- [x] 写一篇简短教程（可放在 `docs/`）
-  - [x] 主题例如："从 0 实现一个 BWA 风格的 Rust FM 索引和对齐器"。
-
-### 5.3 长期维护
-
-- [x] 配置 CI（例如 GitHub Actions）
-  - [x] 在每次提交/PR 时运行：
-    - [x] `cargo fmt -- --check`；
-    - [x] `cargo clippy -- -D warnings`；
-    - [x] `cargo test`。
-
-- [x] 版本管理与发布（如有需要）
-  - [x] 在 `Cargo.toml` 中按语义化版本号管理版本；
-  - [x] 考虑将核心库部分拆分并发布到 crates.io（如果你希望他人复用）。
-
----
-
-## 总结
-
-本路线图以"**受 BWA 启发的 Rust 版序列比对器**"为目标，分 6 个阶段完成：
-
-1. **阶段 0–1**：夯实索引模块，稳定 FMIndex 结构与序列化。
-2. **阶段 2**：从精确匹配升级为"种子 + 局部 DP"对齐。
-3. **阶段 3**：引入 BWA-MEM 风格的 SMEM/链/扩展机制。
-4. **阶段 4**：多线程并行、内存优化、基准测试。
-5. **阶段 5**：文档、示例、CI 与工程化完善。
-
-所有阶段任务均已完成，项目已发布为 **v0.1.0**。
+## v0.1.0 已完成内容
+
+| 阶段 | 内容 | 状态 |
+|------|------|------|
+| **0. 项目基线** | 目标定义、测试数据集 (`data/toy.fa`)、开发脚本 (`scripts/`) | ✅ |
+| **1. 索引稳定化** | FASTA 解析健壮性、FM 索引序列化（magic + 版本号）、SA/BWT 正确性验证 | ✅ |
+| **2. 对齐 MVP** | `AlignOpt` 配置、种子 + 带状 SW 局部对齐、CIGAR/NM 输出 | ✅ |
+| **3. BWA-MEM 风格** | SMEM 种子查找、种子链构建与过滤、链→对齐扩展、主/次比对、MAPQ 估算 | ✅ |
+| **4. 性能与工程化** | criterion 基准测试、rayon 多线程并行、稀疏 SA 采样、带状 DP 缓冲区复用 | ✅ |
+| **5. 文档与维护** | 架构文档、教程、示例代码、GitHub Actions CI | ✅ |
 
 ---
 
@@ -313,11 +23,47 @@
 
 以下是可能的后续发展方向（不在 v0.1.0 范围内）：
 
-- **配对端（PE）对齐**：支持双端 reads、insert size 估计、mate rescue
-- **索引兼容**：支持读取 BWA 原生索引文件（`.bwt/.sa/.pac/.ann/.amb`）
-- **BWA-backtrack**：实现 `aln/samse/sampe` 子命令
-- **BAM 输出**：直接输出 BAM 格式
-- **SIMD 优化**：Smith-Waterman DP 的 SIMD 加速
-- **更大规模测试**：人类基因组级别的正确性和性能验证
+| 版本 | 里程碑 | 核心内容 |
+|------|--------|----------|
+| **0.2.0** | 配对端比对 | PE reads、insert size 估计、mate rescue、proper pair FLAG |
+| **0.3.0** | 索引兼容 | 读取 BWA 原生索引（`.bwt/.sa/.pac/.ann/.amb`） |
+| **0.4.0** | 输出增强 | BAM 直接输出、排序输出支持 |
+| **0.5.0** | 性能飞跃 | Smith-Waterman SIMD 加速、内存映射索引 |
+| **1.0.0** | 生产就绪 | 人类基因组级验证通过、API 稳定承诺、完整文档 |
 
-详细的全量复刻计划见 [`bwa-rust/docs/plan.md`](bwa-rust/docs/plan.md)。
+详细的全量复刻设计见 [`docs/plan.md`](docs/plan.md)。
+
+---
+
+## 版本策略
+
+本项目遵循 [语义化版本 (SemVer)](https://semver.org/)：**`MAJOR.MINOR.PATCH`**
+
+- **MAJOR**：`0` → `1` 表示 API 稳定化承诺；后续 MAJOR 升级表示不兼容变更（如索引格式变更）
+- **MINOR**：新增功能（PE 比对、BAM 输出等），保持向后兼容
+- **PATCH**：Bug 修复、性能微调、文档改进
+
+### `0.x` 阶段
+
+- API 和索引格式**允许不兼容变更**（在 CHANGELOG 中标注 `BREAKING`）
+- `.fm` 索引文件的 `version` 字段用于格式兼容检查
+
+### 进入 `1.0.0` 的条件
+
+1. 人类基因组（hg38）级别的正确性验证通过
+2. 与 C 版 BWA 的 mapping rate 在合理范围内
+3. 公共 API（lib 模式）稳定，不再有频繁破坏性变更
+4. 文档和错误处理达到生产级质量
+
+### 索引格式版本
+
+FM 索引文件（`.fm`）有独立的内部版本号（`FM_VERSION`），与软件版本解耦：
+
+- 软件升级时若索引格式未变，用户无需重建索引
+- 若索引格式发生不兼容变更，递增 `FM_VERSION` 并在加载时检查，给出明确的错误提示
+
+### 发布流程
+
+- 每次发布使用 `v{version}` 格式的 Git 标签（如 `v0.1.0`）
+- 发布前确保：`cargo fmt --check` + `cargo clippy -- -D warnings` + `cargo test` 全部通过
+- [CHANGELOG.md](CHANGELOG.md) 同步更新

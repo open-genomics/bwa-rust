@@ -1,5 +1,5 @@
 # Rust build artifacts
-**/target/
+/target/
 **/*.rs.bk
 
 # IDE
@@ -7,10 +7,43 @@
 .idea/
 *.swp
 *.swo
+*.iml
+*.sublime-project
+*.sublime-workspace
 
 # OS
 Thumbs.db
 .DS_Store
+Desktop.ini
+ehthumbs.db
 
 # Generated index files
 *.fm
+
+# Benchmark output & profiling
+/target/criterion/
+perf.data
+perf.data.old
+flamegraph.svg
+cachegrind.out.*
+callgrind.out.*
+
+# Coverage
+/coverage/
+*.profraw
+*.profdata
+lcov.info
+tarpaulin-report.html
+
+# Documentation build
+/target/doc/
+
+# Node.js / VitePress
+node_modules/
+site/.vitepress/dist/
+site/.vitepress/cache/
+package-lock.json
+
+# Environment
+.env
+.env.local

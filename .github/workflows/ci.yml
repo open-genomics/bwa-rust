@@ -28,16 +28,16 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('bwa-rust/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock') }}
 
       - name: Check formatting
         run: cargo fmt --all -- --check
 
       - name: Clippy lints
-        run: cargo clippy --workspace -p bwa-rust -- -D warnings
+        run: cargo clippy -- -D warnings
 
       - name: Run tests
-        run: cargo test --workspace
+        run: cargo test
 
       - name: Build release
-        run: cargo build --workspace --release
+        run: cargo build --release
