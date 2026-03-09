@@ -47,3 +47,27 @@ pub mod error;
 pub mod index;
 pub mod io;
 pub mod util;
+
+/// 测试共用的辅助函数
+#[cfg(test)]
+pub(crate) mod testutil {
+    use crate::index::fm::{Contig, FMIndex};
+    use crate::index::{bwt, sa};
+    use crate::util::dna;
+
+    /// 从 ASCII 序列构建单 contig FM 索引（仅用于测试）
+    pub fn build_test_fm(seq: &[u8]) -> FMIndex {
+        let norm = dna::normalize_seq(seq);
+        let mut text: Vec<u8> = norm.iter().map(|&b| dna::to_alphabet(b)).collect();
+        let len = text.len() as u32;
+        let contigs = vec![Contig {
+            name: "chr1".to_string(),
+            len,
+            offset: 0,
+        }];
+        text.push(0);
+        let sa_arr = sa::build_sa(&text);
+        let bwt_arr = bwt::build_bwt(&text, &sa_arr);
+        FMIndex::build(text, bwt_arr, sa_arr, contigs, dna::SIGMA as u8, 4)
+    }
+}

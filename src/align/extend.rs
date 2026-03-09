@@ -1,3 +1,5 @@
+use std::fmt::Write as _;
+
 use super::chain::Chain;
 use super::sw::{self, SwBuffer, SwParams};
 
@@ -146,7 +148,6 @@ pub fn chain_to_alignment_buf(
 
     let mut cigar = String::new();
     for (op, len) in ops {
-        use std::fmt::Write as _;
         let _ = write!(&mut cigar, "{}{}", len, op);
     }
 

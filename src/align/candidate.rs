@@ -107,29 +107,10 @@ pub fn dedup_candidates(candidates: &mut Vec<AlignCandidate>) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::index::fm::{Contig, FMIndex};
-    use crate::index::{bwt, sa};
+    use crate::testutil::build_test_fm;
 
     fn default_opt() -> AlignOpt {
         AlignOpt::default()
-    }
-
-    fn build_test_fm(seq: &[u8]) -> FMIndex {
-        let norm = dna::normalize_seq(seq);
-        let mut text: Vec<u8> = Vec::new();
-        for &b in &norm {
-            text.push(dna::to_alphabet(b));
-        }
-        let len = text.len() as u32;
-        let contigs = vec![Contig {
-            name: "chr1".to_string(),
-            len,
-            offset: 0,
-        }];
-        text.push(0);
-        let sa_arr = sa::build_sa(&text);
-        let bwt_arr = bwt::build_bwt(&text, &sa_arr);
-        FMIndex::build(text, bwt_arr, sa_arr, contigs, dna::SIGMA as u8, 4)
     }
 
     #[test]

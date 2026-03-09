@@ -7,7 +7,7 @@ pub fn write_header<W: Write, S: AsRef<str>>(out: &mut W, contigs: &[(S, u32)]) 
     for (name, len) in contigs {
         writeln!(out, "@SQ\tSN:{}\tLN:{}", name.as_ref(), len)?;
     }
-    writeln!(out, "@PG\tID:bwa-rust\tPN:bwa-rust\tVN:0.1.0")?;
+    writeln!(out, "@PG\tID:bwa-rust\tPN:bwa-rust\tVN:{}", env!("CARGO_PKG_VERSION"))?;
     Ok(())
 }
 

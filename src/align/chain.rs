@@ -1,3 +1,5 @@
+use std::collections::{HashMap, HashSet};
+
 use super::seed::MemSeed;
 
 /// 种子链结构
@@ -85,7 +87,7 @@ pub fn build_chains(seeds: &[MemSeed], max_gap: usize) -> Vec<Chain> {
     }
 
     // 按 contig 分组
-    let mut by_contig: std::collections::HashMap<usize, Vec<MemSeed>> = std::collections::HashMap::new();
+    let mut by_contig: HashMap<usize, Vec<MemSeed>> = HashMap::new();
     for s in seeds {
         by_contig.entry(s.contig).or_default().push(s.clone());
     }
@@ -100,7 +102,7 @@ pub fn build_chains(seeds: &[MemSeed], max_gap: usize) -> Vec<Chain> {
             }
             if let Some(chain) = best_chain(&remaining, max_gap) {
                 // 从 remaining 中移除已用种子
-                let used: std::collections::HashSet<(usize, usize, u32, u32)> =
+                let used: HashSet<(usize, usize, u32, u32)> =
                     chain.seeds.iter().map(|s| (s.qb, s.qe, s.rb, s.re)).collect();
                 remaining.retain(|s| !used.contains(&(s.qb, s.qe, s.rb, s.re)));
                 chains.push(chain);

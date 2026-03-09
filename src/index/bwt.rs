@@ -1,5 +1,6 @@
 /// 根据后缀数组构建 BWT。
 /// text 为数值化字母表（0..SIGMA），sa 为后缀数组位置。
+#[must_use]
 pub fn build_bwt(text: &[u8], sa: &[u32]) -> Vec<u8> {
     let n = text.len();
     if n == 0 {

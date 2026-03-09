@@ -1,6 +1,7 @@
 /// 构建后缀数组（基于倍增法，O(n log n) 排序）。
 /// 输入为数值化的文本（如 0:$,1:A,2:C,3:G,4:T,5:N）。
 /// 允许文本中包含多个 0 作为不同 contig 的分隔符。
+#[must_use]
 pub fn build_sa(text: &[u8]) -> Vec<u32> {
     let n = text.len();
     if n == 0 {

@@ -1,6 +1,7 @@
 pub const SIGMA: usize = 6; // {0:$, 1:A, 2:C, 3:G, 4:T, 5:N}
 
 #[inline]
+#[must_use]
 pub fn to_alphabet(b: u8) -> u8 {
     if b == 0 {
         return 0;
@@ -16,6 +17,7 @@ pub fn to_alphabet(b: u8) -> u8 {
 }
 
 #[inline]
+#[must_use]
 pub fn from_alphabet(a: u8) -> u8 {
     match a {
         0 => 0,
@@ -28,6 +30,7 @@ pub fn from_alphabet(a: u8) -> u8 {
     }
 }
 
+#[must_use]
 pub fn normalize_seq(seq: &[u8]) -> Vec<u8> {
     let mut out = Vec::with_capacity(seq.len());
     for &b in seq {
@@ -43,6 +46,7 @@ pub fn normalize_seq(seq: &[u8]) -> Vec<u8> {
 }
 
 #[inline]
+#[must_use]
 pub fn complement(base: u8) -> u8 {
     match base.to_ascii_uppercase() {
         b'A' => b'T',
@@ -53,6 +57,7 @@ pub fn complement(base: u8) -> u8 {
     }
 }
 
+#[must_use]
 pub fn revcomp(seq: &[u8]) -> Vec<u8> {
     let mut out = Vec::with_capacity(seq.len());
     for &b in seq.iter().rev() {

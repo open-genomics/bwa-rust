@@ -36,8 +36,9 @@ pub struct MemSeed {
     pub re: u32,
 }
 
-/// SMEM 搜索：对 read 的每个位置，找到以该位置为起点的最长精确匹配（MEM）。
-/// 使用 FM 索引的 backward_search 逐步延伸。
+/// SMEM 搜索：对 read 的每个位置，找到包含该位置的最长精确匹配（MEM）。
+/// 使用增量式左扩展（incremental left-extension）：固定右端点，逐字符向左扩展 SA 区间，
+/// 每步仅需一次 `rank_range` 调用（O(1)），相比逐长度重新 backward_search（O(L)）显著更快。
 /// 之后过滤被包含的种子，仅保留超级最大精确匹配（SMEM）。
 pub fn find_smem_seeds(fm: &FMIndex, query_alpha: &[u8], min_len: usize) -> Vec<MemSeed> {
     let n = query_alpha.len();
@@ -45,40 +46,38 @@ pub fn find_smem_seeds(fm: &FMIndex, query_alpha: &[u8], min_len: usize) -> Vec<
         return Vec::new();
     }
 
-    // 第一步：为每个起始位置找到最长精确匹配
+    let bwt_len = fm.bwt.len();
     let mut raw_mems: Vec<(usize, usize, usize, usize)> = Vec::new(); // (qb, qe, sa_l, sa_r)
 
-    for qb in 0..n {
-        if qb + min_len > n {
-            break;
+    // 第一步：对每个右端点 qe，通过增量左扩展找到最长精确匹配。
+    // 从单字符 query[qe-1] 开始，逐步向左调用 rank_range 扩展 SA 区间，
+    // 直到区间为空或到达 query 左端。
+    for qe in 1..=n {
+        let (mut l, mut r) = fm.rank_range(query_alpha[qe - 1], 0, bwt_len);
+        if l >= r {
+            continue;
         }
 
-        let mut best_len = 0usize;
-        let mut best_l = 0usize;
-        let mut best_r = 0usize;
+        let mut best_qb = qe - 1;
+        let mut best_l = l;
+        let mut best_r = r;
 
-        // 逐步增加长度，使用 backward_search
-        let _l = 0usize;
-        let _r = fm.bwt.len();
-        // 从 qb+len-1 向 qb 逆向扩展（backward search 的自然方向）
-        // 但我们需要按正序查找子串 query[qb..qb+len]
-        // backward_search 已经内部反转，所以直接调用即可
-        let mut len = min_len;
-        while qb + len <= n {
-            let pat = &query_alpha[qb..qb + len];
-            match fm.backward_search(pat) {
-                Some((sl, sr)) if sl < sr => {
-                    best_len = len;
-                    best_l = sl;
-                    best_r = sr;
-                    len += 1;
-                }
-                _ => break,
+        // 增量左扩展：每步 O(1)
+        for qb in (0..qe.saturating_sub(1)).rev() {
+            let (nl, nr) = fm.rank_range(query_alpha[qb], l, r);
+            if nl >= nr {
+                break;
             }
+            l = nl;
+            r = nr;
+            best_qb = qb;
+            best_l = l;
+            best_r = r;
         }
 
-        if best_len >= min_len {
-            raw_mems.push((qb, qb + best_len, best_l, best_r));
+        let match_len = qe - best_qb;
+        if match_len >= min_len {
+            raw_mems.push((best_qb, qe, best_l, best_r));
         }
     }
 
@@ -165,27 +164,8 @@ pub fn find_mem_seeds(fm: &FMIndex, query_alpha: &[u8], min_len: usize) -> Vec<M
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::index::fm::{Contig, FMIndex};
-    use crate::index::{bwt, sa};
+    use crate::testutil::build_test_fm;
     use crate::util::dna;
-
-    fn build_test_fm(seq: &[u8]) -> FMIndex {
-        let norm = dna::normalize_seq(seq);
-        let mut text: Vec<u8> = Vec::new();
-        for &b in &norm {
-            text.push(dna::to_alphabet(b));
-        }
-        let len = text.len() as u32;
-        let contigs = vec![Contig {
-            name: "chr1".to_string(),
-            len,
-            offset: 0,
-        }];
-        text.push(0);
-        let sa_arr = sa::build_sa(&text);
-        let bwt_arr = bwt::build_bwt(&text, &sa_arr);
-        FMIndex::build(text, bwt_arr, sa_arr, contigs, dna::SIGMA as u8, 4)
-    }
 
     #[test]
     fn smem_seeds_basic() {

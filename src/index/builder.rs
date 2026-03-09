@@ -1,5 +1,7 @@
-use anyhow::Result;
 use std::io::BufRead;
+use std::path::Path;
+
+use anyhow::Result;
 
 use super::{bwt, fm, sa};
 use crate::io::fasta::FastaReader;
@@ -54,8 +56,9 @@ pub fn build_fm_index<R: BufRead>(reader: R, block_size: usize) -> Result<IndexB
 }
 
 /// Convenience: build FM index from a FASTA file path
-pub fn build_fm_from_fasta(path: &str, block_size: usize) -> Result<IndexBuildResult> {
-    let fh = std::fs::File::open(path).map_err(|e| anyhow::anyhow!("cannot open FASTA '{}': {}", path, e))?;
+pub fn build_fm_from_fasta(path: impl AsRef<Path>, block_size: usize) -> Result<IndexBuildResult> {
+    let path = path.as_ref();
+    let fh = std::fs::File::open(path).map_err(|e| anyhow::anyhow!("cannot open FASTA '{}': {}", path.display(), e))?;
     let buf = std::io::BufReader::new(fh);
     build_fm_index(buf, block_size)
 }

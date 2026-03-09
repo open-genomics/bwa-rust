@@ -1,6 +1,7 @@
 /// BWA 风格的 MAPQ 计算
 /// 参考 BWA mem_approx_mapq_se: mapq = MEM_MAPQ_COEF * (1 - sub/best) * ln(best)
 /// MEM_MAPQ_COEF = 30, MEM_MAPQ_MAX = 60
+#[must_use]
 pub fn compute_mapq(best_score: i32, second_best_score: i32) -> u8 {
     const MAPQ_COEF: f64 = 30.0;
     const MAPQ_MAX: u8 = 60;

@@ -64,12 +64,12 @@ impl SwBuffer {
     }
 
     fn resize(&mut self, size: usize) {
+        self.h.clear();
         self.h.resize(size, 0);
+        self.e.clear();
         self.e.resize(size, NEG_INF);
+        self.f.clear();
         self.f.resize(size, NEG_INF);
-        self.h.iter_mut().for_each(|v| *v = 0);
-        self.e.iter_mut().for_each(|v| *v = NEG_INF);
-        self.f.iter_mut().for_each(|v| *v = NEG_INF);
     }
 }
 

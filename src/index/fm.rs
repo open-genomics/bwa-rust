@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 
@@ -200,14 +202,14 @@ impl FMIndex {
         Some((l, r))
     }
 
-    pub fn save_to_file(&self, path: &str) -> Result<()> {
+    pub fn save_to_file(&self, path: impl AsRef<Path>) -> Result<()> {
         let mut f = std::fs::File::create(path)?;
         bincode::serialize_into(&mut f, self)?;
         Ok(())
     }
 
-    pub fn load_from_file(path: &str) -> Result<Self> {
-        let f = std::fs::File::open(path)?;
+    pub fn load_from_file(path: impl AsRef<Path>) -> Result<Self> {
+        let f = std::fs::File::open(path.as_ref())?;
         let idx: Self = bincode::deserialize_from(f)?;
         if idx.magic != FM_MAGIC {
             return Err(anyhow!(

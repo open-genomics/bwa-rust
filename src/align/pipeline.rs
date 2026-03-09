@@ -100,9 +100,9 @@ pub(crate) fn align_single_read(fm: &FMIndex, rec: &FastqRecord, sw_params: SwPa
     // 正向
     let fwd_norm = dna::normalize_seq(seq);
     let fwd_alpha: Vec<u8> = fwd_norm.iter().map(|&b| dna::to_alphabet(b)).collect();
-    // 反向互补
-    let rev_seq = dna::revcomp(seq);
-    let rev_norm = dna::normalize_seq(&rev_seq);
+    // 反向互补（复用同一份 revcomp 结果）
+    let rc_seq = dna::revcomp(seq);
+    let rev_norm = dna::normalize_seq(&rc_seq);
     let rev_alpha: Vec<u8> = rev_norm.iter().map(|&b| dna::to_alphabet(b)).collect();
 
     let mut all_candidates: Vec<AlignCandidate> = Vec::new();
@@ -127,7 +127,6 @@ pub(crate) fn align_single_read(fm: &FMIndex, rec: &FastqRecord, sw_params: SwPa
     // 预生成正向和反向互补的 SEQ/QUAL 字符串
     let seq_fwd = String::from_utf8_lossy(seq).to_string();
     let qual_fwd = String::from_utf8_lossy(qual).to_string();
-    let rc_seq = dna::revcomp(seq);
     let seq_rev = String::from_utf8_lossy(&rc_seq).to_string();
     let qual_rev: String = qual.iter().rev().map(|&b| b as char).collect();
 
@@ -195,31 +194,12 @@ pub(crate) fn align_single_read(fm: &FMIndex, rec: &FastqRecord, sw_params: SwPa
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::index::fm::{Contig, FMIndex};
-    use crate::index::{bwt, sa};
     use crate::io::fastq::FastqRecord;
+    use crate::testutil::build_test_fm;
     use crate::util::dna;
 
     fn default_opt() -> AlignOpt {
         AlignOpt::default()
-    }
-
-    fn build_test_fm(seq: &[u8]) -> FMIndex {
-        let norm = dna::normalize_seq(seq);
-        let mut text: Vec<u8> = Vec::new();
-        for &b in &norm {
-            text.push(dna::to_alphabet(b));
-        }
-        let len = text.len() as u32;
-        let contigs = vec![Contig {
-            name: "chr1".to_string(),
-            len,
-            offset: 0,
-        }];
-        text.push(0);
-        let sa_arr = sa::build_sa(&text);
-        let bwt_arr = bwt::build_bwt(&text, &sa_arr);
-        FMIndex::build(text, bwt_arr, sa_arr, contigs, dna::SIGMA as u8, 4)
     }
 
     #[test]
