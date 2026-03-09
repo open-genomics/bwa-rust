@@ -4,9 +4,20 @@ export default defineConfig({
   title: 'bwa-rust',
   description: 'A BWA-inspired sequence aligner implemented in Rust',
   base: '/bwa-rust/',
+  cleanUrls: true,
+  lastUpdated: true,
+
+  sitemap: {
+    hostname: 'https://lessup.github.io/bwa-rust/',
+  },
 
   head: [
     ['link', { rel: 'icon', type: 'image/svg+xml', href: '/bwa-rust/logo.svg' }],
+    ['meta', { name: 'theme-color', content: '#dea584' }],
+    ['meta', { property: 'og:type', content: 'website' }],
+    ['meta', { property: 'og:title', content: 'bwa-rust' }],
+    ['meta', { property: 'og:description', content: 'A high-performance BWA-MEM style DNA sequence aligner implemented in Rust' }],
+    ['meta', { property: 'og:url', content: 'https://lessup.github.io/bwa-rust/' }],
   ],
 
   locales: {

@@ -4,6 +4,31 @@
 
 格式基于 [Keep a Changelog](https://keepachangelog.com/)，版本号遵循 [语义化版本](https://semver.org/)。
 
+## [Unreleased]
+
+### 改进
+
+- **GitHub Pages 工作流优化**
+  - 修复 paths 触发器引用错误的文件名（`docs.yml` → `pages.yml`）
+  - 添加 sparse-checkout，仅拉取 `site/` 和 `package.json`，跳过源码和构建产物
+  - Node.js 20 → 22（当前 LTS），启用 npm 缓存加速依赖安装
+
+- **VitePress 配置增强**
+  - 启用 `cleanUrls`（去除 `.html` 后缀）
+  - 启用根级 `lastUpdated`（显示页面最后更新时间）
+  - 添加 sitemap 生成（SEO）
+  - 添加 Open Graph 元标签（社交分享预览）
+  - 添加 `theme-color` 元标签
+
+- **文档站内容丰富**
+  - 首页新增"架构设计"快捷入口按钮
+  - 首页新增"Rust 内存安全"和"133 项测试全通过"两个特性卡片
+  - 丰富已有特性卡片描述（SAM header、magic number 等）
+  - 中英文首页同步更新
+
+- **README 徽章补齐**
+  - 英文 README 新增 Docs、Rust 版本徽章，与中文 README 保持一致
+
 ## [0.1.0] - 2026-02-13
 
 ### 新增
