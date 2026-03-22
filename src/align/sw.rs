@@ -2,6 +2,73 @@ use std::fmt::Write as _;
 
 const NEG_INF: i32 = i32::MIN / 4;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum TraceState {
+    Start,
+    Match,
+    Ins,
+    Del,
+}
+
+#[inline]
+fn trace_to_u8(state: TraceState) -> u8 {
+    match state {
+        TraceState::Start => 0,
+        TraceState::Match => 1,
+        TraceState::Ins => 2,
+        TraceState::Del => 3,
+    }
+}
+
+#[inline]
+fn u8_to_trace(code: u8) -> TraceState {
+    match code {
+        1 => TraceState::Match,
+        2 => TraceState::Ins,
+        3 => TraceState::Del,
+        _ => TraceState::Start,
+    }
+}
+
+#[inline]
+fn penalize(score: i32, penalty: i32) -> i32 {
+    if score <= NEG_INF / 2 {
+        NEG_INF
+    } else {
+        score - penalty
+    }
+}
+
+#[inline]
+fn nm_from_ops(ops: &[char], query: &[u8], reference: &[u8]) -> u32 {
+    let mut qi = 0usize;
+    let mut rj = 0usize;
+    let mut nm = 0u32;
+
+    for &op in ops {
+        match op {
+            'M' => {
+                if query[qi] != reference[rj] {
+                    nm += 1;
+                }
+                qi += 1;
+                rj += 1;
+            }
+            'I' => {
+                nm += 1;
+                qi += 1;
+            }
+            'D' => {
+                nm += 1;
+                rj += 1;
+            }
+            _ => {}
+        }
+    }
+
+    nm
+}
+
 /// 扩展对齐结果（用于链端延伸）
 #[derive(Debug, Clone)]
 pub struct ExtendResult {
@@ -39,6 +106,334 @@ pub struct SwResult {
 /// 使用可复用的缓冲区以减少内存分配
 pub fn banded_sw(query: &[u8], reference: &[u8], p: SwParams) -> SwResult {
     banded_sw_with_buf(query, reference, p, &mut SwBuffer::new())
+}
+
+/// 端到端全覆盖比对。
+/// 用于链内两个锚点之间的 gap 补齐，必须同时覆盖完整 query/reference 片段。
+pub fn global_align(query: &[u8], reference: &[u8], p: SwParams) -> SwResult {
+    let m = query.len();
+    let n = reference.len();
+
+    if m == 0 && n == 0 {
+        return SwResult {
+            score: 0,
+            query_start: 0,
+            query_end: 0,
+            ref_start: 0,
+            ref_end: 0,
+            cigar: String::new(),
+            nm: 0,
+        };
+    }
+
+    let cols = n + 1;
+    let size = (m + 1) * cols;
+    let mut match_mat = vec![NEG_INF; size];
+    let mut ins_mat = vec![NEG_INF; size];
+    let mut del_mat = vec![NEG_INF; size];
+    let mut match_trace = vec![0u8; size];
+    let mut ins_trace = vec![0u8; size];
+    let mut del_trace = vec![0u8; size];
+
+    let idx = |i: usize, j: usize| i * cols + j;
+
+    match_mat[idx(0, 0)] = 0;
+
+    for i in 1..=m {
+        let cur = idx(i, 0);
+        let prev = idx(i - 1, 0);
+        let open = penalize(match_mat[prev], p.gap_open + p.gap_extend);
+        let extend = penalize(ins_mat[prev], p.gap_extend);
+        if open >= extend {
+            ins_mat[cur] = open;
+            ins_trace[cur] = trace_to_u8(TraceState::Match);
+        } else {
+            ins_mat[cur] = extend;
+            ins_trace[cur] = trace_to_u8(TraceState::Ins);
+        }
+    }
+
+    for j in 1..=n {
+        let cur = idx(0, j);
+        let prev = idx(0, j - 1);
+        let open = penalize(match_mat[prev], p.gap_open + p.gap_extend);
+        let extend = penalize(del_mat[prev], p.gap_extend);
+        if open >= extend {
+            del_mat[cur] = open;
+            del_trace[cur] = trace_to_u8(TraceState::Match);
+        } else {
+            del_mat[cur] = extend;
+            del_trace[cur] = trace_to_u8(TraceState::Del);
+        }
+    }
+
+    for i in 1..=m {
+        for j in 1..=n {
+            let cur = idx(i, j);
+            let diag = idx(i - 1, j - 1);
+            let up = idx(i - 1, j);
+            let left = idx(i, j - 1);
+
+            let subst = if query[i - 1] == reference[j - 1] {
+                p.match_score
+            } else {
+                -p.mismatch_penalty
+            };
+
+            let mut best_prev = match_mat[diag];
+            let mut best_state = TraceState::Match;
+            if ins_mat[diag] > best_prev {
+                best_prev = ins_mat[diag];
+                best_state = TraceState::Ins;
+            }
+            if del_mat[diag] > best_prev {
+                best_prev = del_mat[diag];
+                best_state = TraceState::Del;
+            }
+            if best_prev > NEG_INF / 2 {
+                match_mat[cur] = best_prev + subst;
+                match_trace[cur] = trace_to_u8(best_state);
+            }
+
+            let open_ins = penalize(match_mat[up], p.gap_open + p.gap_extend);
+            let extend_ins = penalize(ins_mat[up], p.gap_extend);
+            if open_ins >= extend_ins {
+                ins_mat[cur] = open_ins;
+                ins_trace[cur] = trace_to_u8(TraceState::Match);
+            } else {
+                ins_mat[cur] = extend_ins;
+                ins_trace[cur] = trace_to_u8(TraceState::Ins);
+            }
+
+            let open_del = penalize(match_mat[left], p.gap_open + p.gap_extend);
+            let extend_del = penalize(del_mat[left], p.gap_extend);
+            if open_del >= extend_del {
+                del_mat[cur] = open_del;
+                del_trace[cur] = trace_to_u8(TraceState::Match);
+            } else {
+                del_mat[cur] = extend_del;
+                del_trace[cur] = trace_to_u8(TraceState::Del);
+            }
+        }
+    }
+
+    let end = idx(m, n);
+    let mut score = match_mat[end];
+    let mut state = TraceState::Match;
+    if ins_mat[end] > score {
+        score = ins_mat[end];
+        state = TraceState::Ins;
+    }
+    if del_mat[end] > score {
+        score = del_mat[end];
+        state = TraceState::Del;
+    }
+
+    let mut ops: Vec<char> = Vec::with_capacity(m.max(n));
+    let mut i = m;
+    let mut j = n;
+    while i > 0 || j > 0 {
+        let cur = idx(i, j);
+        match state {
+            TraceState::Match => {
+                ops.push('M');
+                state = u8_to_trace(match_trace[cur]);
+                i -= 1;
+                j -= 1;
+            }
+            TraceState::Ins => {
+                ops.push('I');
+                state = u8_to_trace(ins_trace[cur]);
+                i -= 1;
+            }
+            TraceState::Del => {
+                ops.push('D');
+                state = u8_to_trace(del_trace[cur]);
+                j -= 1;
+            }
+            TraceState::Start => break,
+        }
+    }
+    ops.reverse();
+
+    SwResult {
+        score,
+        query_start: 0,
+        query_end: m,
+        ref_start: 0,
+        ref_end: n,
+        cigar: ops_to_cigar(&ops),
+        nm: nm_from_ops(&ops, query, reference),
+    }
+}
+
+/// Query 全长对齐到 reference 的某个局部窗口。
+/// query 必须完整对齐；reference 两端允许免费裁剪，用于候选的局部重打分。
+pub fn semiglobal_align(query: &[u8], reference: &[u8], p: SwParams) -> SwResult {
+    let m = query.len();
+    let n = reference.len();
+
+    if m == 0 {
+        return SwResult {
+            score: 0,
+            query_start: 0,
+            query_end: 0,
+            ref_start: 0,
+            ref_end: 0,
+            cigar: String::new(),
+            nm: 0,
+        };
+    }
+    if n == 0 {
+        let cigar = ops_to_cigar(&vec!['I'; m]);
+        return SwResult {
+            score: -(p.gap_open + p.gap_extend * m as i32),
+            query_start: 0,
+            query_end: m,
+            ref_start: 0,
+            ref_end: 0,
+            cigar,
+            nm: m as u32,
+        };
+    }
+
+    let cols = n + 1;
+    let size = (m + 1) * cols;
+    let mut match_mat = vec![NEG_INF; size];
+    let mut ins_mat = vec![NEG_INF; size];
+    let mut del_mat = vec![NEG_INF; size];
+    let mut match_trace = vec![0u8; size];
+    let mut ins_trace = vec![0u8; size];
+    let mut del_trace = vec![0u8; size];
+
+    let idx = |i: usize, j: usize| i * cols + j;
+
+    for j in 0..=n {
+        match_mat[idx(0, j)] = 0;
+    }
+
+    for i in 1..=m {
+        let cur = idx(i, 0);
+        let prev = idx(i - 1, 0);
+        let open = penalize(match_mat[prev], p.gap_open + p.gap_extend);
+        let extend = penalize(ins_mat[prev], p.gap_extend);
+        if open >= extend {
+            ins_mat[cur] = open;
+            ins_trace[cur] = trace_to_u8(TraceState::Match);
+        } else {
+            ins_mat[cur] = extend;
+            ins_trace[cur] = trace_to_u8(TraceState::Ins);
+        }
+    }
+
+    for i in 1..=m {
+        for j in 1..=n {
+            let cur = idx(i, j);
+            let diag = idx(i - 1, j - 1);
+            let up = idx(i - 1, j);
+            let left = idx(i, j - 1);
+
+            let subst = if query[i - 1] == reference[j - 1] {
+                p.match_score
+            } else {
+                -p.mismatch_penalty
+            };
+
+            let mut best_prev = match_mat[diag];
+            let mut best_state = TraceState::Match;
+            if ins_mat[diag] > best_prev {
+                best_prev = ins_mat[diag];
+                best_state = TraceState::Ins;
+            }
+            if del_mat[diag] > best_prev {
+                best_prev = del_mat[diag];
+                best_state = TraceState::Del;
+            }
+            if best_prev > NEG_INF / 2 {
+                match_mat[cur] = best_prev + subst;
+                match_trace[cur] = trace_to_u8(best_state);
+            }
+
+            let open_ins = penalize(match_mat[up], p.gap_open + p.gap_extend);
+            let extend_ins = penalize(ins_mat[up], p.gap_extend);
+            if open_ins >= extend_ins {
+                ins_mat[cur] = open_ins;
+                ins_trace[cur] = trace_to_u8(TraceState::Match);
+            } else {
+                ins_mat[cur] = extend_ins;
+                ins_trace[cur] = trace_to_u8(TraceState::Ins);
+            }
+
+            let open_del = penalize(match_mat[left], p.gap_open + p.gap_extend);
+            let extend_del = penalize(del_mat[left], p.gap_extend);
+            if open_del >= extend_del {
+                del_mat[cur] = open_del;
+                del_trace[cur] = trace_to_u8(TraceState::Match);
+            } else {
+                del_mat[cur] = extend_del;
+                del_trace[cur] = trace_to_u8(TraceState::Del);
+            }
+        }
+    }
+
+    let mut best_j = 0usize;
+    let mut score = NEG_INF;
+    let mut state = TraceState::Start;
+    for j in 0..=n {
+        let cur = idx(m, j);
+        if match_mat[cur] > score {
+            score = match_mat[cur];
+            state = TraceState::Match;
+            best_j = j;
+        }
+        if ins_mat[cur] > score {
+            score = ins_mat[cur];
+            state = TraceState::Ins;
+            best_j = j;
+        }
+        if del_mat[cur] > score {
+            score = del_mat[cur];
+            state = TraceState::Del;
+            best_j = j;
+        }
+    }
+
+    let mut ops: Vec<char> = Vec::with_capacity(m.max(best_j));
+    let mut i = m;
+    let mut j = best_j;
+    while i > 0 {
+        let cur = idx(i, j);
+        match state {
+            TraceState::Match => {
+                ops.push('M');
+                state = u8_to_trace(match_trace[cur]);
+                i -= 1;
+                j -= 1;
+            }
+            TraceState::Ins => {
+                ops.push('I');
+                state = u8_to_trace(ins_trace[cur]);
+                i -= 1;
+            }
+            TraceState::Del => {
+                ops.push('D');
+                state = u8_to_trace(del_trace[cur]);
+                j -= 1;
+            }
+            TraceState::Start => break,
+        }
+    }
+    ops.reverse();
+
+    SwResult {
+        score,
+        query_start: 0,
+        query_end: m,
+        ref_start: j,
+        ref_end: best_j,
+        cigar: ops_to_cigar(&ops),
+        nm: nm_from_ops(&ops, query, &reference[j..best_j]),
+    }
 }
 
 /// DP 工作缓冲区，可跨调用复用
@@ -292,22 +687,51 @@ pub fn extend_right(query: &[u8], reference: &[u8], p: SwParams, zdrop: i32) -> 
         };
     }
 
-    let rows = m + 1;
     let cols = n + 1;
-    let mut h = vec![NEG_INF; rows * cols];
-    let mut e = vec![NEG_INF; rows * cols];
-    let mut f = vec![NEG_INF; rows * cols];
+    let size = (m + 1) * cols;
+    let mut match_mat = vec![NEG_INF; size];
+    let mut ins_mat = vec![NEG_INF; size];
+    let mut del_mat = vec![NEG_INF; size];
+    let mut match_trace = vec![0u8; size];
+    let mut ins_trace = vec![0u8; size];
+    let mut del_trace = vec![0u8; size];
 
-    // 初始化：允许从任何 ref 位置免费开始（半全局：query 从头开始，ref 可从任意位置开始）
-    // 这里我们做 query 和 ref 都从 0 开始的全局化延伸（ksw_extend 风格：固定起始端）
-    for item in h.iter_mut().take(n + 1) {
-        *item = 0;
+    let idx = |i: usize, j: usize| i * cols + j;
+    match_mat[idx(0, 0)] = 0;
+
+    for i in 1..=m {
+        let cur = idx(i, 0);
+        let prev = idx(i - 1, 0);
+        let open = penalize(match_mat[prev], p.gap_open + p.gap_extend);
+        let extend = penalize(ins_mat[prev], p.gap_extend);
+        if open >= extend {
+            ins_mat[cur] = open;
+            ins_trace[cur] = trace_to_u8(TraceState::Match);
+        } else {
+            ins_mat[cur] = extend;
+            ins_trace[cur] = trace_to_u8(TraceState::Ins);
+        }
+    }
+
+    for j in 1..=n {
+        let cur = idx(0, j);
+        let prev = idx(0, j - 1);
+        let open = penalize(match_mat[prev], p.gap_open + p.gap_extend);
+        let extend = penalize(del_mat[prev], p.gap_extend);
+        if open >= extend {
+            del_mat[cur] = open;
+            del_trace[cur] = trace_to_u8(TraceState::Match);
+        } else {
+            del_mat[cur] = extend;
+            del_trace[cur] = trace_to_u8(TraceState::Del);
+        }
     }
 
     let mut best_score = 0i32;
     let mut best_i = 0usize;
     let mut best_j = 0usize;
     let mut max_score = 0i32;
+    let mut best_state = TraceState::Start;
 
     for i in 1..=m {
         let i_isize = i as isize;
@@ -320,68 +744,82 @@ pub fn extend_right(query: &[u8], reference: &[u8], p: SwParams, zdrop: i32) -> 
         };
 
         for j in j_lo..=j_hi {
-            let idx = i * cols + j;
-            let up_idx = (i - 1) * cols + j;
-            let left_idx = i * cols + (j - 1);
-            let diag_idx = (i - 1) * cols + (j - 1);
-
-            let e_val = if h[up_idx] != NEG_INF {
-                (h[up_idx] - p.gap_open - p.gap_extend).max(if e[up_idx] != NEG_INF {
-                    e[up_idx] - p.gap_extend
-                } else {
-                    NEG_INF
-                })
-            } else {
-                NEG_INF
-            };
-            e[idx] = e_val;
-
-            let f_val = if h[left_idx] != NEG_INF {
-                (h[left_idx] - p.gap_open - p.gap_extend).max(if f[left_idx] != NEG_INF {
-                    f[left_idx] - p.gap_extend
-                } else {
-                    NEG_INF
-                })
-            } else {
-                NEG_INF
-            };
-            f[idx] = f_val;
+            let cur = idx(i, j);
+            let up = idx(i - 1, j);
+            let left = idx(i, j - 1);
+            let diag = idx(i - 1, j - 1);
 
             let subst = if query[i - 1] == reference[j - 1] {
                 p.match_score
             } else {
                 -p.mismatch_penalty
             };
-            let diag_val = if h[diag_idx] != NEG_INF {
-                h[diag_idx] + subst
+
+            let mut best_prev = match_mat[diag];
+            let mut prev_state = TraceState::Match;
+            if ins_mat[diag] > best_prev {
+                best_prev = ins_mat[diag];
+                prev_state = TraceState::Ins;
+            }
+            if del_mat[diag] > best_prev {
+                best_prev = del_mat[diag];
+                prev_state = TraceState::Del;
+            }
+            if best_prev > NEG_INF / 2 {
+                match_mat[cur] = best_prev + subst;
+                match_trace[cur] = trace_to_u8(prev_state);
+            }
+
+            let open_ins = penalize(match_mat[up], p.gap_open + p.gap_extend);
+            let extend_ins = penalize(ins_mat[up], p.gap_extend);
+            if open_ins >= extend_ins {
+                ins_mat[cur] = open_ins;
+                ins_trace[cur] = trace_to_u8(TraceState::Match);
             } else {
-                NEG_INF
-            };
+                ins_mat[cur] = extend_ins;
+                ins_trace[cur] = trace_to_u8(TraceState::Ins);
+            }
 
-            let mut val = diag_val;
-            if e_val > val {
-                val = e_val;
+            let open_del = penalize(match_mat[left], p.gap_open + p.gap_extend);
+            let extend_del = penalize(del_mat[left], p.gap_extend);
+            if open_del >= extend_del {
+                del_mat[cur] = open_del;
+                del_trace[cur] = trace_to_u8(TraceState::Match);
+            } else {
+                del_mat[cur] = extend_del;
+                del_trace[cur] = trace_to_u8(TraceState::Del);
             }
-            if f_val > val {
-                val = f_val;
-            }
-            if val < 0 {
-                val = 0;
-            }
-            h[idx] = val;
 
-            if val > best_score {
-                best_score = val;
+            let mut cell_best = match_mat[cur];
+            let mut cell_state = TraceState::Match;
+            if ins_mat[cur] > cell_best {
+                cell_best = ins_mat[cur];
+                cell_state = TraceState::Ins;
+            }
+            if del_mat[cur] > cell_best {
+                cell_best = del_mat[cur];
+                cell_state = TraceState::Del;
+            }
+
+            if cell_best > best_score {
+                best_score = cell_best;
                 best_i = i;
                 best_j = j;
+                best_state = cell_state;
             }
-            if val > max_score {
-                max_score = val;
+            if cell_best > max_score {
+                max_score = cell_best;
             }
         }
 
         // z-drop: if max score seen in this row is too far below global max, stop
-        let row_best = (j_lo..=j_hi).map(|j| h[i * cols + j]).max().unwrap_or(NEG_INF);
+        let row_best = (j_lo..=j_hi)
+            .map(|j| {
+                let cur = idx(i, j);
+                match_mat[cur].max(ins_mat[cur]).max(del_mat[cur])
+            })
+            .max()
+            .unwrap_or(NEG_INF);
         if zdrop > 0 && max_score - row_best >= zdrop {
             break;
         }
@@ -400,35 +838,27 @@ pub fn extend_right(query: &[u8], reference: &[u8], p: SwParams, zdrop: i32) -> 
     let mut ops: Vec<char> = Vec::new();
     let mut i = best_i;
     let mut j = best_j;
-    while i > 0 && j > 0 {
-        let idx = i * cols + j;
-        let hv = h[idx];
-        if hv == 0 {
-            break;
-        }
-        let diag_idx = (i - 1) * cols + (j - 1);
-        let subst = if query[i - 1] == reference[j - 1] {
-            p.match_score
-        } else {
-            -p.mismatch_penalty
-        };
-        let dv = if h[diag_idx] != NEG_INF {
-            h[diag_idx] + subst
-        } else {
-            NEG_INF
-        };
-        if hv == dv {
-            ops.push('M');
-            i -= 1;
-            j -= 1;
-        } else if hv == e[idx] {
-            ops.push('I');
-            i -= 1;
-        } else if hv == f[idx] {
-            ops.push('D');
-            j -= 1;
-        } else {
-            break;
+    let mut state = best_state;
+    while i > 0 || j > 0 {
+        let cur = idx(i, j);
+        match state {
+            TraceState::Match => {
+                ops.push('M');
+                state = u8_to_trace(match_trace[cur]);
+                i -= 1;
+                j -= 1;
+            }
+            TraceState::Ins => {
+                ops.push('I');
+                state = u8_to_trace(ins_trace[cur]);
+                i -= 1;
+            }
+            TraceState::Del => {
+                ops.push('D');
+                state = u8_to_trace(del_trace[cur]);
+                j -= 1;
+            }
+            TraceState::Start => break,
         }
     }
     ops.reverse();
@@ -671,5 +1101,37 @@ mod tests {
         assert_eq!(res.cigar, "4M");
         assert_eq!(res.ref_start, 4);
         assert_eq!(res.ref_end, 8);
+    }
+
+    #[test]
+    fn global_align_keeps_full_gap() {
+        let p = SwParams {
+            match_score: 2,
+            mismatch_penalty: 1,
+            gap_open: 2,
+            gap_extend: 1,
+            band_width: 8,
+        };
+        let res = global_align(b"CCCC", b"TTTTCCCC", p);
+        assert_eq!(res.cigar, "4D4M");
+        assert_eq!(res.nm, 4);
+        assert_eq!(res.score, 2);
+    }
+
+    #[test]
+    fn semiglobal_align_finds_single_insertion() {
+        let p = SwParams {
+            match_score: 1,
+            mismatch_penalty: 4,
+            gap_open: 6,
+            gap_extend: 1,
+            band_width: 32,
+        };
+        let res = semiglobal_align(b"GGCCAAATTGGCCAATTGGCC", b"TTTGGCCAATTGGCCAATTGGCCTTT", p);
+        assert_eq!(res.ref_start, 3);
+        assert_eq!(res.ref_end, 23);
+        assert!(res.cigar.contains('I'));
+        assert!(!res.cigar.contains('S'));
+        assert_eq!(res.nm, 1);
     }
 }

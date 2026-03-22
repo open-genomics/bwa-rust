@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::io::BufRead;
 use std::path::Path;
 
@@ -22,8 +23,15 @@ pub fn build_fm_index<R: BufRead>(reader: R, block_size: usize) -> Result<IndexB
     let mut total_len = 0usize;
     let mut text: Vec<u8> = Vec::new();
     let mut contigs: Vec<fm::Contig> = Vec::new();
+    let mut seen_names: HashSet<String> = HashSet::new();
 
     while let Some(rec) = fasta.next_record()? {
+        if rec.seq.is_empty() {
+            anyhow::bail!("FASTA sequence '{}' is empty", rec.id);
+        }
+        if !seen_names.insert(rec.id.clone()) {
+            anyhow::bail!("duplicate FASTA sequence name '{}'", rec.id);
+        }
         n_seqs += 1;
         total_len += rec.seq.len();
         let norm = dna::normalize_seq(&rec.seq);
@@ -149,5 +157,19 @@ mod tests {
         assert_eq!(result.total_len, 8);
         let pat: Vec<u8> = b"ACGT".iter().map(|&b| dna::to_alphabet(b)).collect();
         assert!(result.fm.backward_search(&pat).is_some());
+    }
+
+    #[test]
+    fn build_fasta_rejects_duplicate_names() {
+        let data = b">chr1\nACGT\n>chr1\nTGCA\n";
+        let cursor = Cursor::new(&data[..]);
+        assert!(build_fm_index(cursor, 4).is_err());
+    }
+
+    #[test]
+    fn build_fasta_rejects_empty_sequence() {
+        let data = b">chr1\n";
+        let cursor = Cursor::new(&data[..]);
+        assert!(build_fm_index(cursor, 4).is_err());
     }
 }

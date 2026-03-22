@@ -8,6 +8,17 @@
 
 ### 改进
 
+- **比对质量修正**
+  - 修复正向/反向候选在排序前提前做阈值判断，导致强反向命中被误判为 unmapped 的问题
+  - 为链候选增加局部窗口全长重比对（semi-global refinement），改善 mismatch / indel 的 CIGAR 与 NM
+  - 引入软剪切惩罚参与候选排序，避免免费 soft-clip 长期压过真实的单碱基 indel
+  - `mem` 样例中的 insertion / deletion read 现在会输出真实 `I/D`，不再被假全长 `M` 或过度软剪切掩盖
+
+- **输入校验增强**
+  - FASTA header 缺少序列名时直接报错
+  - FASTA 空序列和重复 contig 名在建索引阶段拒绝通过
+  - `--threads 0` 现在会在 CLI 层直接报错，而不是静默回退到默认线程池
+
 - **GitHub Pages 工作流优化**
   - 修复 paths 触发器引用错误的文件名（`docs.yml` → `pages.yml`）
   - 添加 sparse-checkout，仅拉取 `site/` 和 `package.json`，跳过源码和构建产物
@@ -54,4 +65,3 @@
   - criterion 基准测试
   - GitHub Actions CI（fmt、clippy、test、release build）
   - 架构文档、教程、示例代码
-

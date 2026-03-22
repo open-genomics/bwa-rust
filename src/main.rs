@@ -27,15 +27,15 @@ struct Cli {
 
 #[derive(Subcommand, Debug)]
 enum Commands {
-    /// Build index of the reference (BWT/FM will be added later)
+    /// Build an FM index from a reference FASTA
     Index {
         /// Reference FASTA file
         reference: String,
-        /// Output prefix for index files (not used yet)
+        /// Output prefix for the generated .fm index
         #[arg(short, long, default_value = "ref")]
         output: String,
     },
-    /// Align reads (FASTQ) using an FM index (exact match MVP)
+    /// Align reads in FASTQ against an existing FM index
     Align {
         /// Path to FM index (.fm)
         #[arg(short = 'i', long = "index")]
@@ -53,11 +53,13 @@ enum Commands {
         gap_open: i32,
         #[arg(long = "gap-ext", default_value_t = 1)]
         gap_extend: i32,
+        #[arg(long = "clip-penalty", default_value_t = 1)]
+        clip_penalty: i32,
         #[arg(long = "band-width", default_value_t = 16)]
         band_width: usize,
         #[arg(long = "score-threshold", default_value_t = 20)]
         score_threshold: i32,
-        #[arg(short = 't', long = "threads", default_value_t = 1)]
+        #[arg(short = 't', long = "threads", value_parser = parse_threads, default_value_t = 1)]
         threads: usize,
     },
     /// BWA-MEM style alignment: build index from FASTA and align FASTQ in one step
@@ -81,6 +83,9 @@ enum Commands {
         /// Gap extension penalty
         #[arg(short = 'E', long = "gap-ext", default_value_t = 1)]
         gap_extend: i32,
+        /// Soft-clipping penalty used during candidate ranking
+        #[arg(long = "clip-penalty", default_value_t = 1)]
+        clip_penalty: i32,
         /// Band width for banded SW
         #[arg(short = 'w', long = "band-width", default_value_t = 100)]
         band_width: usize,
@@ -88,9 +93,17 @@ enum Commands {
         #[arg(short = 'T', long = "score-threshold", default_value_t = 10)]
         score_threshold: i32,
         /// Number of threads
-        #[arg(short = 't', long = "threads", default_value_t = 1)]
+        #[arg(short = 't', long = "threads", value_parser = parse_threads, default_value_t = 1)]
         threads: usize,
     },
+}
+
+fn parse_threads(s: &str) -> std::result::Result<usize, String> {
+    let threads: usize = s.parse().map_err(|_| "threads must be a positive integer".to_string())?;
+    if threads == 0 {
+        return Err("threads must be >= 1".to_string());
+    }
+    Ok(threads)
 }
 
 fn build_align_opt(
@@ -98,6 +111,7 @@ fn build_align_opt(
     mismatch_penalty: i32,
     gap_open: i32,
     gap_extend: i32,
+    clip_penalty: i32,
     band_width: usize,
     score_threshold: i32,
     threads: usize,
@@ -107,6 +121,7 @@ fn build_align_opt(
         mismatch_penalty,
         gap_open,
         gap_extend,
+        clip_penalty,
         band_width,
         score_threshold,
         min_seed_len: 19,
@@ -126,6 +141,7 @@ fn main() -> Result<()> {
             mismatch_penalty,
             gap_open,
             gap_extend,
+            clip_penalty,
             band_width,
             score_threshold,
             threads,
@@ -135,6 +151,7 @@ fn main() -> Result<()> {
                 mismatch_penalty,
                 gap_open,
                 gap_extend,
+                clip_penalty,
                 band_width,
                 score_threshold,
                 threads,
@@ -149,6 +166,7 @@ fn main() -> Result<()> {
             mismatch_penalty,
             gap_open,
             gap_extend,
+            clip_penalty,
             band_width,
             score_threshold,
             threads,
@@ -158,6 +176,7 @@ fn main() -> Result<()> {
                 mismatch_penalty,
                 gap_open,
                 gap_extend,
+                clip_penalty,
                 band_width,
                 score_threshold,
                 threads,

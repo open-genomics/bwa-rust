@@ -397,8 +397,8 @@ mod tests {
         let fm = FMIndex::build_sparse(text.clone(), bwt_arr, sa_arr, contigs, 6, 4, 4);
         assert_eq!(fm.sa_sample_rate, 4);
         // Verify sa_value recovers correct positions via LF-mapping
-        for i in 0..full_sa.len() {
-            assert_eq!(fm.sa_value(i), full_sa[i], "sa_value mismatch at i={}", i);
+        for (i, &sa_value) in full_sa.iter().enumerate() {
+            assert_eq!(fm.sa_value(i), sa_value, "sa_value mismatch at i={}", i);
         }
     }
 

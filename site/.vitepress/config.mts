@@ -12,12 +12,16 @@ export default defineConfig({
   },
 
   head: [
+    ['link', { rel: 'canonical', href: 'https://lessup.github.io/bwa-rust/' }],
     ['link', { rel: 'icon', type: 'image/svg+xml', href: '/bwa-rust/logo.svg' }],
     ['meta', { name: 'theme-color', content: '#dea584' }],
     ['meta', { property: 'og:type', content: 'website' }],
     ['meta', { property: 'og:title', content: 'bwa-rust' }],
     ['meta', { property: 'og:description', content: 'A high-performance BWA-MEM style DNA sequence aligner implemented in Rust' }],
     ['meta', { property: 'og:url', content: 'https://lessup.github.io/bwa-rust/' }],
+    ['meta', { name: 'twitter:card', content: 'summary' }],
+    ['meta', { name: 'twitter:title', content: 'bwa-rust' }],
+    ['meta', { name: 'twitter:description', content: 'A BWA-inspired sequence aligner implemented in Rust' }],
   ],
 
   locales: {
@@ -53,7 +57,7 @@ export default defineConfig({
           },
         ],
         editLink: {
-          pattern: 'https://github.com/LessUp/bwa-rust/edit/main/site/:path',
+          pattern: 'https://github.com/LessUp/bwa-rust/edit/master/site/:path',
           text: '在 GitHub 上编辑此页',
         },
         footer: {
@@ -101,7 +105,7 @@ export default defineConfig({
           },
         ],
         editLink: {
-          pattern: 'https://github.com/LessUp/bwa-rust/edit/main/site/:path',
+          pattern: 'https://github.com/LessUp/bwa-rust/edit/master/site/:path',
           text: 'Edit this page on GitHub',
         },
         footer: {

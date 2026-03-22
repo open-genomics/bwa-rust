@@ -1,7 +1,11 @@
+use std::collections::HashMap;
+
+use crate::index::fm::Contig;
 use crate::index::fm::FMIndex;
 use crate::util::dna;
 
 use super::extend::chain_to_alignment_buf;
+use super::extend::ChainAlignResult;
 use super::sw;
 use super::{build_chains, filter_chains, find_smem_seeds};
 use super::{AlignOpt, SwParams};
@@ -9,6 +13,7 @@ use super::{AlignOpt, SwParams};
 #[derive(Debug, Clone)]
 pub struct AlignCandidate {
     pub score: i32,
+    pub sort_score: i32,
     pub is_rev: bool,
     pub rname: String,
     pub pos1: u32,
@@ -43,39 +48,130 @@ pub fn collect_candidates(
     filter_chains(&mut chains, 0.3);
 
     let mut sw_buf = sw::SwBuffer::new();
+    let mut ref_cache: HashMap<usize, Vec<u8>> = HashMap::new();
 
     for ch in &chains {
         let ci = ch.contig;
         let contig = &fm.contigs[ci];
-        let offset = contig.offset as usize;
-        let contig_len = contig.len as usize;
-        if contig_len == 0 {
-            continue;
-        }
-
-        let mut ref_seq: Vec<u8> = Vec::with_capacity(contig_len);
-        for &code in &fm.text[offset..offset + contig_len] {
-            ref_seq.push(dna::from_alphabet(code));
-        }
+        let ref_seq = ref_cache.entry(ci).or_insert_with(|| {
+            let offset = contig.offset as usize;
+            let contig_len = contig.len as usize;
+            fm.text[offset..offset + contig_len]
+                .iter()
+                .map(|&code| dna::from_alphabet(code))
+                .collect()
+        });
         if ref_seq.is_empty() {
             continue;
         }
 
-        let res = chain_to_alignment_buf(ch, query_norm, &ref_seq, sw_params, &mut sw_buf);
-        if res.score <= 0 || res.cigar.is_empty() {
+        let approx = chain_to_alignment_buf(ch, query_norm, ref_seq.as_slice(), sw_params, &mut sw_buf);
+        let refined = refine_candidate_alignment(ch, query_norm, ref_seq.as_slice(), sw_params);
+        let (ref_offset, selected) = choose_alignment(approx, refined, opt.clip_penalty);
+
+        if selected.score <= 0 || selected.cigar.is_empty() {
             continue;
         }
 
-        candidates.push(AlignCandidate {
-            score: res.score,
+        candidates.push(build_candidate(
+            contig,
+            ci,
             is_rev,
-            rname: contig.name.clone(),
-            pos1: (res.ref_start as u32) + 1,
+            &selected,
+            ref_offset,
+            opt.clip_penalty,
+        ));
+    }
+}
+
+fn refine_candidate_alignment(
+    chain: &super::chain::Chain,
+    query_norm: &[u8],
+    reference: &[u8],
+    sw_params: SwParams,
+) -> Option<(usize, ChainAlignResult)> {
+    if chain.seeds.is_empty() || query_norm.is_empty() || reference.is_empty() {
+        return None;
+    }
+
+    let seed_start = chain.seeds.iter().map(|s| s.rb as usize).min()?;
+    let seed_end = chain.seeds.iter().map(|s| s.re as usize).max()?;
+    let pad = query_norm.len() + sw_params.band_width + 16;
+    let window_start = seed_start.saturating_sub(pad);
+    let window_end = (seed_end + pad).min(reference.len());
+    if window_start >= window_end {
+        return None;
+    }
+
+    let res = sw::semiglobal_align(query_norm, &reference[window_start..window_end], sw_params);
+    if res.score <= 0 || res.cigar.is_empty() {
+        return None;
+    }
+
+    Some((
+        window_start,
+        ChainAlignResult {
+            score: res.score,
             cigar: res.cigar,
             nm: res.nm,
-            contig_idx: ci,
-        });
+            query_start: res.query_start,
+            query_end: res.query_end,
+            ref_start: res.ref_start,
+            ref_end: res.ref_end,
+        },
+    ))
+}
+
+fn choose_alignment(
+    approx: ChainAlignResult,
+    refined: Option<(usize, ChainAlignResult)>,
+    clip_penalty: i32,
+) -> (usize, ChainAlignResult) {
+    let approx_rank = effective_score(approx.score, &approx.cigar, clip_penalty);
+    let Some((window_offset, refined)) = refined else {
+        return (0, approx);
+    };
+    let refined_rank = effective_score(refined.score, &refined.cigar, clip_penalty);
+
+    if refined_rank > approx_rank
+        || (refined_rank == approx_rank && refined.score > approx.score)
+        || (refined_rank == approx_rank && refined.score == approx.score && refined.nm < approx.nm)
+    {
+        (window_offset, refined)
+    } else {
+        (0, approx)
     }
+}
+
+fn build_candidate(
+    contig: &Contig,
+    contig_idx: usize,
+    is_rev: bool,
+    res: &ChainAlignResult,
+    ref_offset: usize,
+    clip_penalty: i32,
+) -> AlignCandidate {
+    AlignCandidate {
+        score: res.score,
+        sort_score: effective_score(res.score, &res.cigar, clip_penalty),
+        is_rev,
+        rname: contig.name.clone(),
+        pos1: (ref_offset + res.ref_start) as u32 + 1,
+        cigar: res.cigar.clone(),
+        nm: res.nm,
+        contig_idx,
+    }
+}
+
+fn effective_score(score: i32, cigar: &str, clip_penalty: i32) -> i32 {
+    score - soft_clipped_bases(cigar) as i32 * clip_penalty
+}
+
+fn soft_clipped_bases(cigar: &str) -> usize {
+    sw::parse_cigar(cigar)
+        .into_iter()
+        .filter_map(|(op, len)| if op == 'S' { Some(len) } else { None })
+        .sum()
 }
 
 pub fn dedup_candidates(candidates: &mut Vec<AlignCandidate>) {
@@ -178,6 +274,7 @@ mod tests {
         let mut cands = vec![
             AlignCandidate {
                 score: 50,
+                sort_score: 50,
                 is_rev: false,
                 rname: "chr1".into(),
                 pos1: 10,
@@ -187,6 +284,7 @@ mod tests {
             },
             AlignCandidate {
                 score: 40,
+                sort_score: 40,
                 is_rev: false,
                 rname: "chr1".into(),
                 pos1: 10,
@@ -196,6 +294,7 @@ mod tests {
             },
             AlignCandidate {
                 score: 45,
+                sort_score: 45,
                 is_rev: true,
                 rname: "chr1".into(),
                 pos1: 10,
@@ -213,6 +312,7 @@ mod tests {
         let mut cands = vec![
             AlignCandidate {
                 score: 50,
+                sort_score: 50,
                 is_rev: false,
                 rname: "chr1".into(),
                 pos1: 10,
@@ -222,6 +322,7 @@ mod tests {
             },
             AlignCandidate {
                 score: 45,
+                sort_score: 45,
                 is_rev: false,
                 rname: "chr1".into(),
                 pos1: 20,
@@ -231,6 +332,7 @@ mod tests {
             },
             AlignCandidate {
                 score: 40,
+                sort_score: 40,
                 is_rev: true,
                 rname: "chr1".into(),
                 pos1: 10,
@@ -248,5 +350,11 @@ mod tests {
         let mut cands: Vec<AlignCandidate> = vec![];
         dedup_candidates(&mut cands);
         assert!(cands.is_empty());
+    }
+
+    #[test]
+    fn effective_score_penalizes_soft_clipping() {
+        assert_eq!(effective_score(16, "5S16M", 1), 11);
+        assert_eq!(effective_score(13, "4M1I16M", 1), 13);
     }
 }

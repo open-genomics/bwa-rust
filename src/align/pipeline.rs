@@ -112,15 +112,24 @@ pub(crate) fn align_single_read(fm: &FMIndex, rec: &FastqRecord, sw_params: SwPa
     // 反向互补对齐候选
     collect_candidates(fm, &rev_norm, &rev_alpha, sw_params, true, opt, &mut all_candidates);
 
-    if all_candidates.is_empty() || all_candidates[0].score < opt.score_threshold {
+    if all_candidates.is_empty() {
         return vec![sam::format_unmapped(qname, &seq_str, &qual_str)];
     }
 
     // 按得分降序排列
-    all_candidates.sort_by(|a, b| b.score.cmp(&a.score));
+    all_candidates.sort_by(|a, b| {
+        b.sort_score
+            .cmp(&a.sort_score)
+            .then(b.score.cmp(&a.score))
+            .then(a.nm.cmp(&b.nm))
+    });
 
     // 去重：位置和方向相同的只保留得分最高的
     dedup_candidates(&mut all_candidates);
+
+    if all_candidates.is_empty() || all_candidates[0].sort_score < opt.score_threshold {
+        return vec![sam::format_unmapped(qname, &seq_str, &qual_str)];
+    }
 
     let mut sam_lines = Vec::new();
 
@@ -130,15 +139,21 @@ pub(crate) fn align_single_read(fm: &FMIndex, rec: &FastqRecord, sw_params: SwPa
     let seq_rev = String::from_utf8_lossy(&rc_seq).to_string();
     let qual_rev: String = qual.iter().rev().map(|&b| b as char).collect();
 
-    let best_score = all_candidates[0].score;
-    let second_best_score = if all_candidates.len() > 1 {
+    let best_sort_score = all_candidates[0].sort_score;
+    let second_best_sort_score = if all_candidates.len() > 1 {
+        all_candidates[1].sort_score
+    } else {
+        0
+    };
+    let best_raw_score = all_candidates[0].score;
+    let second_best_raw_score = if all_candidates.len() > 1 {
         all_candidates[1].score
     } else {
         0
     };
 
     for (idx, cand) in all_candidates.iter().enumerate() {
-        if cand.score < opt.score_threshold {
+        if cand.sort_score < opt.score_threshold {
             break;
         }
 
@@ -154,12 +169,16 @@ pub(crate) fn align_single_read(fm: &FMIndex, rec: &FastqRecord, sw_params: SwPa
         }
 
         let mapq = if idx == 0 {
-            compute_mapq(best_score, second_best_score)
+            compute_mapq(best_sort_score, second_best_sort_score)
         } else {
             0
         };
 
-        let sub_score = if idx == 0 { second_best_score } else { best_score };
+        let sub_score = if idx == 0 {
+            second_best_raw_score
+        } else {
+            best_raw_score
+        };
 
         // SAM 规范：FLAG 含 0x10 时，SEQ 为原始 read 的反向互补，QUAL 反转
         let (out_seq, out_qual) = if cand.is_rev {
@@ -194,9 +213,11 @@ pub(crate) fn align_single_read(fm: &FMIndex, rec: &FastqRecord, sw_params: SwPa
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::index::builder::build_fm_index;
     use crate::io::fastq::FastqRecord;
     use crate::testutil::build_test_fm;
     use crate::util::dna;
+    use std::io::Cursor;
 
     fn default_opt() -> AlignOpt {
         AlignOpt::default()
@@ -310,5 +331,147 @@ mod tests {
             // 无论正向还是反向映射，重要的是 read 能被成功比对
             assert!(lines[0].contains("chr1"));
         }
+    }
+
+    #[test]
+    fn align_single_read_prefers_best_revcomp_candidate_before_threshold() {
+        let fasta = b">chr_exact\nAACCTTGGAACC\n>chr_partial\nGGTTCCAAAAAA\n";
+        let fm = build_fm_index(Cursor::new(&fasta[..]), 4).unwrap().fm;
+        let rec = FastqRecord {
+            id: "rev-best".to_string(),
+            desc: None,
+            seq: b"GGTTCCAAGGTT".to_vec(),
+            qual: vec![b'I'; 12],
+        };
+        let sw = SwParams {
+            match_score: 1,
+            mismatch_penalty: 4,
+            gap_open: 6,
+            gap_extend: 1,
+            band_width: 100,
+        };
+        let opt = AlignOpt {
+            match_score: 1,
+            mismatch_penalty: 4,
+            gap_open: 6,
+            gap_extend: 1,
+            clip_penalty: 1,
+            band_width: 100,
+            score_threshold: 10,
+            min_seed_len: 19,
+            threads: 1,
+        };
+
+        let lines = align_single_read(&fm, &rec, sw, &opt);
+        assert_eq!(lines.len(), 1);
+
+        let fields: Vec<&str> = lines[0].split('\t').collect();
+        let flag: u16 = fields[1].parse().unwrap();
+        assert_eq!(fields[2], "chr_exact");
+        assert_eq!(fields[5], "12M");
+        assert_eq!(flag & 0x4, 0, "read should be mapped");
+        assert_ne!(flag & 0x10, 0, "primary alignment should be reverse-complement");
+    }
+
+    #[test]
+    fn align_single_read_refines_single_insertion_to_indel_cigar() {
+        let fm = build_test_fm(b"GGCCAATTGGCCAATTGGCC");
+        let rec = FastqRecord {
+            id: "ins".to_string(),
+            desc: None,
+            seq: b"GGCCAAATTGGCCAATTGGCC".to_vec(),
+            qual: vec![b'I'; 21],
+        };
+        let sw = SwParams {
+            match_score: 1,
+            mismatch_penalty: 4,
+            gap_open: 6,
+            gap_extend: 1,
+            band_width: 64,
+        };
+        let opt = AlignOpt {
+            match_score: 1,
+            mismatch_penalty: 4,
+            gap_open: 6,
+            gap_extend: 1,
+            clip_penalty: 1,
+            band_width: 64,
+            score_threshold: 10,
+            min_seed_len: 19,
+            threads: 1,
+        };
+
+        let lines = align_single_read(&fm, &rec, sw, &opt);
+        let fields: Vec<&str> = lines[0].split('\t').collect();
+        assert!(fields[5].contains('I'));
+        assert!(!fields[5].contains('S'));
+    }
+
+    #[test]
+    fn align_single_read_refines_single_deletion_to_indel_cigar() {
+        let fm = build_test_fm(b"ATCGATCGATCGATCGATCG");
+        let rec = FastqRecord {
+            id: "del".to_string(),
+            desc: None,
+            seq: b"ATCGACGATCGATCGATCG".to_vec(),
+            qual: vec![b'I'; 19],
+        };
+        let sw = SwParams {
+            match_score: 1,
+            mismatch_penalty: 4,
+            gap_open: 6,
+            gap_extend: 1,
+            band_width: 64,
+        };
+        let opt = AlignOpt {
+            match_score: 1,
+            mismatch_penalty: 4,
+            gap_open: 6,
+            gap_extend: 1,
+            clip_penalty: 1,
+            band_width: 64,
+            score_threshold: 10,
+            min_seed_len: 19,
+            threads: 1,
+        };
+
+        let lines = align_single_read(&fm, &rec, sw, &opt);
+        let fields: Vec<&str> = lines[0].split('\t').collect();
+        assert!(fields[5].contains('D'));
+        assert!(!fields[5].contains('S'));
+    }
+
+    #[test]
+    fn align_single_read_refines_single_mismatch_without_softclip() {
+        let fm = build_test_fm(b"ATCGATCGATCGATCGATCG");
+        let rec = FastqRecord {
+            id: "mismatch".to_string(),
+            desc: None,
+            seq: b"ATCGTTCGATCGATCGATCG".to_vec(),
+            qual: vec![b'I'; 20],
+        };
+        let sw = SwParams {
+            match_score: 1,
+            mismatch_penalty: 4,
+            gap_open: 6,
+            gap_extend: 1,
+            band_width: 64,
+        };
+        let opt = AlignOpt {
+            match_score: 1,
+            mismatch_penalty: 4,
+            gap_open: 6,
+            gap_extend: 1,
+            clip_penalty: 1,
+            band_width: 64,
+            score_threshold: 10,
+            min_seed_len: 19,
+            threads: 1,
+        };
+
+        let lines = align_single_read(&fm, &rec, sw, &opt);
+        let fields: Vec<&str> = lines[0].split('\t').collect();
+        assert_eq!(fields[5], "20M");
+        assert!(!lines[0].contains("\tNM:i:0"));
     }
 }

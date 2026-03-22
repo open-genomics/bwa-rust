@@ -23,7 +23,7 @@ pub fn chain_to_alignment_buf(
     query: &[u8],
     reference: &[u8],
     p: SwParams,
-    buf: &mut SwBuffer,
+    _buf: &mut SwBuffer,
 ) -> ChainAlignResult {
     if chain.seeds.is_empty() {
         return ChainAlignResult {
@@ -89,15 +89,15 @@ pub fn chain_to_alignment_buf(
                     if q_gap_end <= query.len() && r_gap_end <= reference.len() {
                         let q_gap = &query[q_gap_start..q_gap_end];
                         let r_gap = &reference[r_gap_start..r_gap_end];
-                        let res = sw::banded_sw_with_buf(q_gap, r_gap, p, buf);
-                        if res.score > 0 && !res.cigar.is_empty() {
-                            let parsed = sw::parse_cigar(&res.cigar);
-                            for (op_ch, num) in parsed {
-                                push_run(&mut ops, op_ch, num);
-                            }
-                            total_score += res.score;
-                            total_nm += res.nm;
+                        // 链内 gap 两端都被锚定，必须完整覆盖 query/ref gap；
+                        // 这里不能再用局部 SW，否则会把中间不匹配/缺失“裁掉”，导致 CIGAR/AS/NM 失真。
+                        let res = sw::global_align(q_gap, r_gap, p);
+                        let parsed = sw::parse_cigar(&res.cigar);
+                        for (op_ch, num) in parsed {
+                            push_run(&mut ops, op_ch, num);
                         }
+                        total_score += res.score;
+                        total_nm += res.nm;
                     }
                 } else if q_gap_len > 0 {
                     push_run(&mut ops, 'I', q_gap_len);
@@ -386,5 +386,43 @@ mod tests {
         // query_start <= 2, query_end >= 6
         assert!(res.query_start <= 2);
         assert!(res.query_end >= 6);
+    }
+
+    #[test]
+    fn chain_to_alignment_keeps_internal_deletion_gap() {
+        let p = SwParams {
+            match_score: 2,
+            mismatch_penalty: 1,
+            gap_open: 2,
+            gap_extend: 1,
+            band_width: 8,
+        };
+        let chain = Chain {
+            contig: 0,
+            seeds: vec![
+                MemSeed {
+                    contig: 0,
+                    qb: 0,
+                    qe: 4,
+                    rb: 0,
+                    re: 4,
+                },
+                MemSeed {
+                    contig: 0,
+                    qb: 8,
+                    qe: 12,
+                    rb: 12,
+                    re: 16,
+                },
+            ],
+            score: 8,
+        };
+        let query = b"AAAACCCCGGGG";
+        let reference = b"AAAATTTTCCCCGGGG";
+        let res = chain_to_alignment(&chain, query, reference, p);
+
+        assert_eq!(res.cigar, "4M4D8M");
+        assert_eq!(res.nm, 4);
+        assert_eq!(res.score, 18);
     }
 }

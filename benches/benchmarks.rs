@@ -38,7 +38,7 @@ fn bench_backward_search(c: &mut Criterion) {
     c.bench_function("backward_search_20bp", |b| {
         b.iter(|| {
             black_box(fm_idx.backward_search(black_box(&pattern)));
-        })
+        });
     });
 }
 
@@ -52,7 +52,7 @@ fn bench_smem_seeds(c: &mut Criterion) {
     c.bench_function("smem_seeds_100bp", |b| {
         b.iter(|| {
             black_box(align::find_smem_seeds(black_box(&fm_idx), black_box(&alpha), 19));
-        })
+        });
     });
 }
 
@@ -71,7 +71,7 @@ fn bench_banded_sw(c: &mut Criterion) {
     c.bench_function("banded_sw_100bp", |b| {
         b.iter(|| {
             black_box(align::banded_sw(black_box(&query), black_box(&ref_seq), params));
-        })
+        });
     });
 }
 
@@ -86,7 +86,7 @@ fn bench_build_sa(c: &mut Criterion) {
     c.bench_function("build_sa_10k", |b| {
         b.iter(|| {
             black_box(sa::build_sa(black_box(&text)));
-        })
+        });
     });
 }
 
