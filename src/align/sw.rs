@@ -111,6 +111,10 @@ pub fn banded_sw(query: &[u8], reference: &[u8], p: SwParams) -> SwResult {
 /// 端到端全覆盖比对。
 /// 用于链内两个锚点之间的 gap 补齐，必须同时覆盖完整 query/reference 片段。
 pub fn global_align(query: &[u8], reference: &[u8], p: SwParams) -> SwResult {
+    global_align_with_buf(query, reference, p, &mut SwBuffer::new())
+}
+
+pub fn global_align_with_buf(query: &[u8], reference: &[u8], p: SwParams, buf: &mut SwBuffer) -> SwResult {
     let m = query.len();
     let n = reference.len();
 
@@ -128,12 +132,13 @@ pub fn global_align(query: &[u8], reference: &[u8], p: SwParams) -> SwResult {
 
     let cols = n + 1;
     let size = (m + 1) * cols;
-    let mut match_mat = vec![NEG_INF; size];
-    let mut ins_mat = vec![NEG_INF; size];
-    let mut del_mat = vec![NEG_INF; size];
-    let mut match_trace = vec![0u8; size];
-    let mut ins_trace = vec![0u8; size];
-    let mut del_trace = vec![0u8; size];
+    buf.resize_affine(size);
+    let match_mat = &mut buf.h;
+    let ins_mat = &mut buf.e;
+    let del_mat = &mut buf.f;
+    let match_trace = &mut buf.match_trace;
+    let ins_trace = &mut buf.ins_trace;
+    let del_trace = &mut buf.del_trace;
 
     let idx = |i: usize, j: usize| i * cols + j;
 
@@ -270,6 +275,10 @@ pub fn global_align(query: &[u8], reference: &[u8], p: SwParams) -> SwResult {
 /// Query 全长对齐到 reference 的某个局部窗口。
 /// query 必须完整对齐；reference 两端允许免费裁剪，用于候选的局部重打分。
 pub fn semiglobal_align(query: &[u8], reference: &[u8], p: SwParams) -> SwResult {
+    semiglobal_align_with_buf(query, reference, p, &mut SwBuffer::new())
+}
+
+pub fn semiglobal_align_with_buf(query: &[u8], reference: &[u8], p: SwParams, buf: &mut SwBuffer) -> SwResult {
     let m = query.len();
     let n = reference.len();
 
@@ -299,12 +308,13 @@ pub fn semiglobal_align(query: &[u8], reference: &[u8], p: SwParams) -> SwResult
 
     let cols = n + 1;
     let size = (m + 1) * cols;
-    let mut match_mat = vec![NEG_INF; size];
-    let mut ins_mat = vec![NEG_INF; size];
-    let mut del_mat = vec![NEG_INF; size];
-    let mut match_trace = vec![0u8; size];
-    let mut ins_trace = vec![0u8; size];
-    let mut del_trace = vec![0u8; size];
+    buf.resize_affine(size);
+    let match_mat = &mut buf.h;
+    let ins_mat = &mut buf.e;
+    let del_mat = &mut buf.f;
+    let match_trace = &mut buf.match_trace;
+    let ins_trace = &mut buf.ins_trace;
+    let del_trace = &mut buf.del_trace;
 
     let idx = |i: usize, j: usize| i * cols + j;
 
@@ -441,6 +451,9 @@ pub struct SwBuffer {
     h: Vec<i32>,
     e: Vec<i32>,
     f: Vec<i32>,
+    match_trace: Vec<u8>,
+    ins_trace: Vec<u8>,
+    del_trace: Vec<u8>,
 }
 
 impl Default for SwBuffer {
@@ -455,6 +468,9 @@ impl SwBuffer {
             h: Vec::new(),
             e: Vec::new(),
             f: Vec::new(),
+            match_trace: Vec::new(),
+            ins_trace: Vec::new(),
+            del_trace: Vec::new(),
         }
     }
 
@@ -465,6 +481,21 @@ impl SwBuffer {
         self.e.resize(size, NEG_INF);
         self.f.clear();
         self.f.resize(size, NEG_INF);
+    }
+
+    fn resize_affine(&mut self, size: usize) {
+        self.h.clear();
+        self.h.resize(size, NEG_INF);
+        self.e.clear();
+        self.e.resize(size, NEG_INF);
+        self.f.clear();
+        self.f.resize(size, NEG_INF);
+        self.match_trace.clear();
+        self.match_trace.resize(size, 0);
+        self.ins_trace.clear();
+        self.ins_trace.resize(size, 0);
+        self.del_trace.clear();
+        self.del_trace.resize(size, 0);
     }
 }
 

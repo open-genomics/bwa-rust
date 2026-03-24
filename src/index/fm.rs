@@ -50,8 +50,12 @@ pub struct FMIndex {
 
 impl FMIndex {
     pub fn build(text: Vec<u8>, bwt: Vec<u8>, sa: Vec<u32>, contigs: Vec<Contig>, sigma: u8, block: usize) -> Self {
+        assert!(block > 0, "block size must be greater than zero");
         let n = bwt.len();
         let sigma_us = sigma as usize;
+        assert!(sigma_us > 0, "sigma must be greater than zero");
+        assert_eq!(bwt.len(), text.len(), "BWT/text length mismatch");
+        assert_eq!(sa.len(), text.len(), "SA/text length mismatch");
         // 计算 C 表
         let mut freq = vec![0u32; sigma_us];
         for &ch in &bwt {
@@ -155,6 +159,74 @@ impl FMIndex {
         self.meta = Some(meta);
     }
 
+    fn validate(&self) -> Result<()> {
+        if self.sigma == 0 {
+            return Err(anyhow!("invalid FM index file: sigma must be greater than zero"));
+        }
+        if self.block == 0 {
+            return Err(anyhow!("invalid FM index file: block size must be greater than zero"));
+        }
+        if self.bwt.len() != self.text.len() {
+            return Err(anyhow!("invalid FM index file: BWT/text length mismatch"));
+        }
+        if self.c.len() != self.sigma as usize {
+            return Err(anyhow!("invalid FM index file: C table length does not match sigma"));
+        }
+        let expected_blocks = if self.bwt.is_empty() {
+            0
+        } else {
+            (self.bwt.len() + self.block as usize - 1) / self.block as usize
+        };
+        let expected_occ_len = expected_blocks * self.sigma as usize;
+        if self.occ_samples.len() != expected_occ_len {
+            return Err(anyhow!(
+                "invalid FM index file: occ_samples length mismatch (expected {}, got {})",
+                expected_occ_len,
+                self.occ_samples.len()
+            ));
+        }
+        if self.sa_sample_rate <= 1 {
+            if self.sa.len() != self.bwt.len() {
+                return Err(anyhow!("invalid FM index file: SA length mismatch"));
+            }
+        } else {
+            let rate = self.sa_sample_rate as usize;
+            let expected_sa_len = (self.bwt.len() + rate - 1) / rate;
+            if self.sa.len() != expected_sa_len {
+                return Err(anyhow!(
+                    "invalid FM index file: sparse SA length mismatch (expected {}, got {})",
+                    expected_sa_len,
+                    self.sa.len()
+                ));
+            }
+        }
+        for (i, &ch) in self.bwt.iter().enumerate() {
+            if ch as usize >= self.sigma as usize {
+                return Err(anyhow!("invalid FM index file: BWT symbol out of range at {}", i));
+            }
+        }
+        for (i, &pos) in self.sa.iter().enumerate() {
+            if pos as usize >= self.text.len() {
+                return Err(anyhow!("invalid FM index file: SA position out of range at {}", i));
+            }
+        }
+        let mut expected_offset = 0u32;
+        for contig in &self.contigs {
+            if contig.offset != expected_offset {
+                return Err(anyhow!("invalid FM index file: contig offsets are not contiguous"));
+            }
+            let end = contig
+                .offset
+                .checked_add(contig.len)
+                .ok_or_else(|| anyhow!("invalid FM index file: contig range overflow"))?;
+            if end as usize > self.text.len() {
+                return Err(anyhow!("invalid FM index file: contig range exceeds text length"));
+            }
+            expected_offset = end.saturating_add(1);
+        }
+        Ok(())
+    }
+
     #[inline]
     pub fn occ(&self, c: u8, pos: usize) -> u32 {
         // 返回 BWT[0..pos) 中 c 的出现次数
@@ -225,6 +297,7 @@ impl FMIndex {
                 idx.version
             ));
         }
+        idx.validate()?;
         Ok(idx)
     }
 
@@ -234,6 +307,21 @@ impl FMIndex {
             self.sa[l..r].to_vec()
         } else {
             (l..r).map(|i| self.sa_value(i)).collect()
+        }
+    }
+
+    pub fn for_each_sa_interval_position<F>(&self, l: usize, r: usize, mut f: F)
+    where
+        F: FnMut(u32),
+    {
+        if self.sa_sample_rate <= 1 {
+            for &pos in &self.sa[l..r] {
+                f(pos);
+            }
+        } else {
+            for i in l..r {
+                f(self.sa_value(i));
+            }
         }
     }
 
@@ -490,6 +578,44 @@ mod tests {
         let meta = loaded.meta.unwrap();
         assert_eq!(meta.reference_file.as_deref(), Some("test.fa"));
         assert_eq!(meta.build_args.as_deref(), Some("bwa-rust index test.fa"));
+        std::fs::remove_file(path).ok();
+    }
+
+    #[test]
+    #[should_panic(expected = "block size must be greater than zero")]
+    fn fm_build_rejects_zero_block_size() {
+        let text = vec![1u8, 2, 3, 4, 0];
+        let sa_arr = sa::build_sa(&text);
+        let bwt_arr = bwt::build_bwt(&text, &sa_arr);
+        let contigs = vec![Contig {
+            name: "seq1".to_string(),
+            len: 4,
+            offset: 0,
+        }];
+        let _ = FMIndex::build(text, bwt_arr, sa_arr, contigs, 6, 0);
+    }
+
+    #[test]
+    fn fm_load_rejects_zero_block_size() {
+        let mut fm = build_toy_fm(&[1, 2, 3, 4]);
+        fm.block = 0;
+        let tmp = std::env::temp_dir().join("bwa_rust_test_fm_invalid_block.fm");
+        let path = tmp.to_str().unwrap();
+        fm.save_to_file(path).unwrap();
+        let err = FMIndex::load_from_file(path).unwrap_err();
+        assert!(err.to_string().contains("block size"));
+        std::fs::remove_file(path).ok();
+    }
+
+    #[test]
+    fn fm_load_rejects_invalid_occ_samples_len() {
+        let mut fm = build_toy_fm(&[1, 2, 3, 4]);
+        fm.occ_samples.pop();
+        let tmp = std::env::temp_dir().join("bwa_rust_test_fm_invalid_occ.fm");
+        let path = tmp.to_str().unwrap();
+        fm.save_to_file(path).unwrap();
+        let err = FMIndex::load_from_file(path).unwrap_err();
+        assert!(err.to_string().contains("occ_samples"));
         std::fs::remove_file(path).ok();
     }
 }

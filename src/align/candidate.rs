@@ -48,6 +48,7 @@ pub fn collect_candidates(
     filter_chains(&mut chains, 0.3);
 
     let mut sw_buf = sw::SwBuffer::new();
+    let mut refine_buf = sw::SwBuffer::new();
     let mut ref_cache: HashMap<usize, Vec<u8>> = HashMap::new();
 
     for ch in &chains {
@@ -66,7 +67,7 @@ pub fn collect_candidates(
         }
 
         let approx = chain_to_alignment_buf(ch, query_norm, ref_seq.as_slice(), sw_params, &mut sw_buf);
-        let refined = refine_candidate_alignment(ch, query_norm, ref_seq.as_slice(), sw_params);
+        let refined = refine_candidate_alignment(ch, query_norm, ref_seq.as_slice(), sw_params, &mut refine_buf);
         let (ref_offset, selected) = choose_alignment(approx, refined, opt.clip_penalty);
 
         if selected.score <= 0 || selected.cigar.is_empty() {
@@ -89,6 +90,7 @@ fn refine_candidate_alignment(
     query_norm: &[u8],
     reference: &[u8],
     sw_params: SwParams,
+    sw_buf: &mut sw::SwBuffer,
 ) -> Option<(usize, ChainAlignResult)> {
     if chain.seeds.is_empty() || query_norm.is_empty() || reference.is_empty() {
         return None;
@@ -103,7 +105,7 @@ fn refine_candidate_alignment(
         return None;
     }
 
-    let res = sw::semiglobal_align(query_norm, &reference[window_start..window_end], sw_params);
+    let res = sw::semiglobal_align_with_buf(query_norm, &reference[window_start..window_end], sw_params, sw_buf);
     if res.score <= 0 || res.cigar.is_empty() {
         return None;
     }

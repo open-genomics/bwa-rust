@@ -46,11 +46,17 @@ pub fn align_fastq_with_fm_opt(
         band_width: opt.band_width,
     };
 
-    // 设置 rayon 线程池
-    let pool = rayon::ThreadPoolBuilder::new()
-        .num_threads(opt.threads)
-        .build()
-        .unwrap_or_else(|_| rayon::ThreadPoolBuilder::new().build().unwrap());
+    // 仅在多线程模式下创建自定义 rayon 线程池，单线程直接顺序执行以减少开销
+    let pool = if opt.threads > 1 {
+        Some(
+            rayon::ThreadPoolBuilder::new()
+                .num_threads(opt.threads)
+                .build()
+                .unwrap_or_else(|_| rayon::ThreadPoolBuilder::new().build().unwrap()),
+        )
+    } else {
+        None
+    };
 
     // 批量读取 reads 并行处理
     let batch_size = 1000;
@@ -66,17 +72,25 @@ pub fn align_fastq_with_fm_opt(
             break;
         }
 
-        let fm_ref = Arc::clone(&fm);
-        let results: Vec<Vec<String>> = pool.install(|| {
-            batch
-                .par_iter()
-                .map(|rec| align_single_read(&fm_ref, rec, sw_params, &opt))
-                .collect()
-        });
+        if let Some(pool) = &pool {
+            let fm_ref = Arc::clone(&fm);
+            let results: Vec<Vec<String>> = pool.install(|| {
+                batch
+                    .par_iter()
+                    .map(|rec| align_single_read(&fm_ref, rec, sw_params, &opt))
+                    .collect()
+            });
 
-        for lines in results {
-            for line in lines {
-                writeln!(out_box, "{}", line)?;
+            for lines in results {
+                for line in lines {
+                    writeln!(out_box, "{}", line)?;
+                }
+            }
+        } else {
+            for rec in &batch {
+                for line in align_single_read(&fm, rec, sw_params, &opt) {
+                    writeln!(out_box, "{}", line)?;
+                }
             }
         }
     }
@@ -90,11 +104,11 @@ pub(crate) fn align_single_read(fm: &FMIndex, rec: &FastqRecord, sw_params: SwPa
     let seq = &rec.seq;
     let qual = &rec.qual;
 
-    let seq_str = String::from_utf8_lossy(seq);
-    let qual_str = String::from_utf8_lossy(qual);
+    let seq_fwd = String::from_utf8_lossy(seq).into_owned();
+    let qual_fwd = String::from_utf8_lossy(qual).into_owned();
 
     if seq.is_empty() {
-        return vec![sam::format_unmapped(qname, &seq_str, &qual_str)];
+        return vec![sam::format_unmapped(qname, &seq_fwd, &qual_fwd)];
     }
 
     // 正向
@@ -113,7 +127,7 @@ pub(crate) fn align_single_read(fm: &FMIndex, rec: &FastqRecord, sw_params: SwPa
     collect_candidates(fm, &rev_norm, &rev_alpha, sw_params, true, opt, &mut all_candidates);
 
     if all_candidates.is_empty() {
-        return vec![sam::format_unmapped(qname, &seq_str, &qual_str)];
+        return vec![sam::format_unmapped(qname, &seq_fwd, &qual_fwd)];
     }
 
     // 按得分降序排列
@@ -122,22 +136,33 @@ pub(crate) fn align_single_read(fm: &FMIndex, rec: &FastqRecord, sw_params: SwPa
             .cmp(&a.sort_score)
             .then(b.score.cmp(&a.score))
             .then(a.nm.cmp(&b.nm))
+            .then(a.contig_idx.cmp(&b.contig_idx))
+            .then(a.pos1.cmp(&b.pos1))
+            .then(a.is_rev.cmp(&b.is_rev))
+            .then(a.cigar.cmp(&b.cigar))
     });
 
     // 去重：位置和方向相同的只保留得分最高的
     dedup_candidates(&mut all_candidates);
 
     if all_candidates.is_empty() || all_candidates[0].sort_score < opt.score_threshold {
-        return vec![sam::format_unmapped(qname, &seq_str, &qual_str)];
+        return vec![sam::format_unmapped(qname, &seq_fwd, &qual_fwd)];
     }
 
-    let mut sam_lines = Vec::new();
+    let mut sam_lines = Vec::with_capacity(all_candidates.len().min(5));
 
-    // 预生成正向和反向互补的 SEQ/QUAL 字符串
-    let seq_fwd = String::from_utf8_lossy(seq).to_string();
-    let qual_fwd = String::from_utf8_lossy(qual).to_string();
-    let seq_rev = String::from_utf8_lossy(&rc_seq).to_string();
-    let qual_rev: String = qual.iter().rev().map(|&b| b as char).collect();
+    let needs_rev_output = all_candidates
+        .iter()
+        .take(5)
+        .any(|cand| cand.sort_score >= opt.score_threshold && cand.is_rev);
+    let (seq_rev, qual_rev) = if needs_rev_output {
+        (
+            String::from_utf8_lossy(&rc_seq).into_owned(),
+            qual.iter().rev().map(|&b| b as char).collect(),
+        )
+    } else {
+        (String::new(), String::new())
+    };
 
     let best_sort_score = all_candidates[0].sort_score;
     let second_best_sort_score = if all_candidates.len() > 1 {

@@ -23,7 +23,7 @@ pub fn chain_to_alignment_buf(
     query: &[u8],
     reference: &[u8],
     p: SwParams,
-    _buf: &mut SwBuffer,
+    buf: &mut SwBuffer,
 ) -> ChainAlignResult {
     if chain.seeds.is_empty() {
         return ChainAlignResult {
@@ -91,7 +91,7 @@ pub fn chain_to_alignment_buf(
                         let r_gap = &reference[r_gap_start..r_gap_end];
                         // 链内 gap 两端都被锚定，必须完整覆盖 query/ref gap；
                         // 这里不能再用局部 SW，否则会把中间不匹配/缺失“裁掉”，导致 CIGAR/AS/NM 失真。
-                        let res = sw::global_align(q_gap, r_gap, p);
+                        let res = sw::global_align_with_buf(q_gap, r_gap, p, buf);
                         let parsed = sw::parse_cigar(&res.cigar);
                         for (op_ch, num) in parsed {
                             push_run(&mut ops, op_ch, num);

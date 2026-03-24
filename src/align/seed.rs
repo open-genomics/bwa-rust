@@ -87,9 +87,9 @@ pub fn find_smem_seeds(fm: &FMIndex, query_alpha: &[u8], min_len: usize) -> Vec<
     // 第三步：将区间展开为具体种子
     let mut seeds = Vec::new();
     for (qb, qe, l, r) in &raw_mems {
-        for sa_pos in fm.sa_interval_positions(*l, *r) {
+        let seed_len = (qe - qb) as u32;
+        fm.for_each_sa_interval_position(*l, *r, |sa_pos| {
             if let Some((ci, off)) = fm.map_text_pos(sa_pos) {
-                let seed_len = (qe - qb) as u32;
                 let contig_len = fm.contigs[ci].len;
                 if off + seed_len <= contig_len {
                     seeds.push(MemSeed {
@@ -101,7 +101,7 @@ pub fn find_smem_seeds(fm: &FMIndex, query_alpha: &[u8], min_len: usize) -> Vec<
                     });
                 }
             }
-        }
+        });
     }
 
     dedup_seeds(&mut seeds);
@@ -113,35 +113,20 @@ fn filter_contained(mems: &mut Vec<(usize, usize, usize, usize)>) {
     if mems.len() <= 1 {
         return;
     }
-    // 按长度降序排列
-    mems.sort_by(|a, b| {
-        let len_a = a.1 - a.0;
-        let len_b = b.1 - b.0;
-        len_b.cmp(&len_a)
-    });
 
-    let mut keep = vec![true; mems.len()];
-    for i in 0..mems.len() {
-        if !keep[i] {
+    mems.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| b.1.cmp(&a.1)));
+
+    let mut filtered = Vec::with_capacity(mems.len());
+    let mut max_qe = 0usize;
+    for mem in mems.drain(..) {
+        if mem.1 <= max_qe {
             continue;
         }
-        for j in (i + 1)..mems.len() {
-            if !keep[j] {
-                continue;
-            }
-            // 如果 j 被 i 完全包含
-            if mems[i].0 <= mems[j].0 && mems[i].1 >= mems[j].1 {
-                keep[j] = false;
-            }
-        }
+        max_qe = mem.1;
+        filtered.push(mem);
     }
 
-    let mut idx = 0;
-    mems.retain(|_| {
-        let k = keep[idx];
-        idx += 1;
-        k
-    });
+    *mems = filtered;
 }
 
 fn dedup_seeds(seeds: &mut Vec<MemSeed>) {
@@ -267,5 +252,18 @@ mod tests {
         let seeds1 = find_smem_seeds(&fm, &alpha, 2);
         let seeds2 = find_mem_seeds(&fm, &alpha, 2);
         assert_eq!(seeds1, seeds2);
+    }
+
+    #[test]
+    fn filter_contained_removes_nested_intervals() {
+        let mut mems = vec![
+            (0, 10, 0, 1),
+            (2, 8, 1, 2),
+            (2, 6, 2, 3),
+            (10, 15, 3, 4),
+            (11, 14, 4, 5),
+        ];
+        filter_contained(&mut mems);
+        assert_eq!(mems, vec![(0, 10, 0, 1), (10, 15, 3, 4)]);
     }
 }

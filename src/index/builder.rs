@@ -9,6 +9,7 @@ use crate::io::fasta::FastaReader;
 use crate::util::dna;
 
 /// Result of building an FM index from FASTA
+#[derive(Debug)]
 pub struct IndexBuildResult {
     pub fm: fm::FMIndex,
     pub n_seqs: usize,
@@ -17,6 +18,10 @@ pub struct IndexBuildResult {
 
 /// Build an FM index from a buffered FASTA reader
 pub fn build_fm_index<R: BufRead>(reader: R, block_size: usize) -> Result<IndexBuildResult> {
+    if block_size == 0 {
+        anyhow::bail!("block size must be greater than zero");
+    }
+
     let mut fasta = FastaReader::new(reader);
 
     let mut n_seqs = 0usize;
@@ -35,11 +40,14 @@ pub fn build_fm_index<R: BufRead>(reader: R, block_size: usize) -> Result<IndexB
         n_seqs += 1;
         total_len += rec.seq.len();
         let norm = dna::normalize_seq(&rec.seq);
-        let start = text.len() as u32;
+        let start =
+            u32::try_from(text.len()).map_err(|_| anyhow::anyhow!("reference text exceeds u32 address space"))?;
         for b in norm {
             text.push(dna::to_alphabet(b));
         }
-        let len_u32 = (text.len() as u32).saturating_sub(start);
+        let text_len_u32 =
+            u32::try_from(text.len()).map_err(|_| anyhow::anyhow!("reference text exceeds u32 address space"))?;
+        let len_u32 = text_len_u32 - start;
         contigs.push(fm::Contig {
             name: rec.id,
             len: len_u32,
@@ -171,5 +179,13 @@ mod tests {
         let data = b">chr1\n";
         let cursor = Cursor::new(&data[..]);
         assert!(build_fm_index(cursor, 4).is_err());
+    }
+
+    #[test]
+    fn build_fasta_rejects_zero_block_size() {
+        let data = b">chr1\nACGT\n";
+        let cursor = Cursor::new(&data[..]);
+        let err = build_fm_index(cursor, 0).unwrap_err();
+        assert!(err.to_string().contains("block size"));
     }
 }

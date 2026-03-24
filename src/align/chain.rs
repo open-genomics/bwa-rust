@@ -92,10 +92,13 @@ pub fn build_chains(seeds: &[MemSeed], max_gap: usize) -> Vec<Chain> {
         by_contig.entry(s.contig).or_default().push(s.clone());
     }
 
+    let mut contig_groups: Vec<(usize, Vec<MemSeed>)> = by_contig.into_iter().collect();
+    contig_groups.sort_by_key(|(contig_id, _)| *contig_id);
+
     let mut chains = Vec::new();
-    for contig_seeds in by_contig.values() {
+    for (_contig_id, contig_seeds) in contig_groups {
         // 提取多条链（贪心剥离）
-        let mut remaining = contig_seeds.clone();
+        let mut remaining = contig_seeds;
         for _ in 0..5 {
             if remaining.is_empty() {
                 break;
@@ -112,7 +115,7 @@ pub fn build_chains(seeds: &[MemSeed], max_gap: usize) -> Vec<Chain> {
         }
     }
 
-    chains.sort_by(|a, b| b.score.cmp(&a.score));
+    sort_chains_deterministically(&mut chains);
     chains
 }
 
@@ -123,37 +126,37 @@ pub fn filter_chains(chains: &mut Vec<Chain>, min_score_ratio: f64) {
         return;
     }
 
-    let best_score = chains[0].score;
+    let best_score = chains.iter().map(|chain| chain.score).max().unwrap_or(0);
     let threshold = (best_score as f64 * min_score_ratio) as u32;
 
     // 按得分过滤
     chains.retain(|c| c.score >= threshold);
 
-    // 去除 read 覆盖高度重叠的链
+    let ranges: Vec<ChainRanges> = chains.iter().map(ChainRanges::from_chain).collect();
+
+    // 仅在同一 contig 且参考区间也高度重叠时，才视为冗余链
     let mut keep = vec![true; chains.len()];
     for i in 0..chains.len() {
         if !keep[i] {
             continue;
         }
         let ci = &chains[i];
-        let (qi_min, qi_max) = chain_query_range(ci);
+        let ri = &ranges[i];
 
         for j in (i + 1)..chains.len() {
             if !keep[j] {
                 continue;
             }
             let cj = &chains[j];
-            let (qj_min, qj_max) = chain_query_range(cj);
+            if ci.contig != cj.contig {
+                continue;
+            }
+            let rj = &ranges[j];
 
-            // 计算 read 坐标上的重叠
-            let overlap_start = qi_min.max(qj_min);
-            let overlap_end = qi_max.min(qj_max);
-            if overlap_end > overlap_start {
-                let overlap_len = overlap_end - overlap_start;
-                let shorter_len = (qi_max - qi_min).min(qj_max - qj_min);
-                if shorter_len > 0 && overlap_len as f64 / shorter_len as f64 > 0.8 {
-                    keep[j] = false;
-                }
+            if overlap_ratio(ri.qb as u64, ri.qe as u64, rj.qb as u64, rj.qe as u64) > 0.8
+                && overlap_ratio(ri.rb as u64, ri.re as u64, rj.rb as u64, rj.re as u64) > 0.8
+            {
+                keep[j] = false;
             }
         }
     }
@@ -170,6 +173,56 @@ fn chain_query_range(chain: &Chain) -> (usize, usize) {
     let min = chain.seeds.iter().map(|s| s.qb).min().unwrap_or(0);
     let max = chain.seeds.iter().map(|s| s.qe).max().unwrap_or(0);
     (min, max)
+}
+
+fn chain_ref_range(chain: &Chain) -> (u32, u32) {
+    let min = chain.seeds.iter().map(|s| s.rb).min().unwrap_or(0);
+    let max = chain.seeds.iter().map(|s| s.re).max().unwrap_or(0);
+    (min, max)
+}
+
+#[derive(Clone, Copy)]
+struct ChainRanges {
+    qb: usize,
+    qe: usize,
+    rb: u32,
+    re: u32,
+}
+
+impl ChainRanges {
+    fn from_chain(chain: &Chain) -> Self {
+        let (qb, qe) = chain_query_range(chain);
+        let (rb, re) = chain_ref_range(chain);
+        Self { qb, qe, rb, re }
+    }
+}
+
+fn sort_chains_deterministically(chains: &mut Vec<Chain>) {
+    let mut decorated: Vec<(ChainRanges, Chain)> =
+        chains.drain(..).map(|chain| (ChainRanges::from_chain(&chain), chain)).collect();
+    decorated.sort_by(|(ra, a), (rb, b)| {
+        b.score
+            .cmp(&a.score)
+            .then(a.contig.cmp(&b.contig))
+            .then((ra.rb, ra.re).cmp(&(rb.rb, rb.re)))
+            .then((ra.qb, ra.qe).cmp(&(rb.qb, rb.qe)))
+    });
+    chains.extend(decorated.into_iter().map(|(_, chain)| chain));
+}
+
+fn overlap_ratio(a_start: u64, a_end: u64, b_start: u64, b_end: u64) -> f64 {
+    let overlap_start = a_start.max(b_start);
+    let overlap_end = a_end.min(b_end);
+    if overlap_end <= overlap_start {
+        return 0.0;
+    }
+    let overlap_len = overlap_end - overlap_start;
+    let shorter_len = (a_end - a_start).min(b_end - b_start);
+    if shorter_len == 0 {
+        0.0
+    } else {
+        overlap_len as f64 / shorter_len as f64
+    }
 }
 
 #[cfg(test)]
@@ -446,6 +499,74 @@ mod tests {
         ];
         filter_chains(&mut chains, 0.5);
         assert_eq!(chains.len(), 2);
+    }
+
+    #[test]
+    fn filter_chains_keeps_overlapping_multimappers_on_same_contig() {
+        let mut chains = vec![
+            Chain {
+                contig: 0,
+                seeds: vec![MemSeed {
+                    contig: 0,
+                    qb: 0,
+                    qe: 12,
+                    rb: 10,
+                    re: 22,
+                }],
+                score: 12,
+            },
+            Chain {
+                contig: 0,
+                seeds: vec![MemSeed {
+                    contig: 0,
+                    qb: 0,
+                    qe: 12,
+                    rb: 110,
+                    re: 122,
+                }],
+                score: 12,
+            },
+        ];
+        filter_chains(&mut chains, 0.5);
+        assert_eq!(chains.len(), 2);
+    }
+
+    #[test]
+    fn build_chains_uses_deterministic_tie_break_order() {
+        let seeds = vec![
+            MemSeed {
+                contig: 1,
+                qb: 0,
+                qe: 4,
+                rb: 100,
+                re: 104,
+            },
+            MemSeed {
+                contig: 1,
+                qb: 4,
+                qe: 8,
+                rb: 104,
+                re: 108,
+            },
+            MemSeed {
+                contig: 0,
+                qb: 0,
+                qe: 4,
+                rb: 0,
+                re: 4,
+            },
+            MemSeed {
+                contig: 0,
+                qb: 4,
+                qe: 8,
+                rb: 4,
+                re: 8,
+            },
+        ];
+        let chains = build_chains(&seeds, 10);
+        assert!(chains.len() >= 2);
+        assert_eq!(chains[0].contig, 0);
+        assert_eq!(chains[1].contig, 1);
     }
 
     #[test]
