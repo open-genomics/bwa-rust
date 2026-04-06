@@ -3,6 +3,9 @@ use std::fmt::Write as _;
 use super::chain::Chain;
 use super::sw::{self, SwBuffer, SwParams};
 
+/// 链端延伸时参考序列的额外填充长度（对齐左/右端时预留 buffer，防止带状 SW 被参考边界截断）
+const EXTEND_REF_PAD: usize = 32;
+
 #[derive(Debug, PartialEq, Eq)]
 pub struct ChainAlignResult {
     pub score: i32,
@@ -14,10 +17,16 @@ pub struct ChainAlignResult {
     pub ref_end: usize,
 }
 
+/// 将单条种子链转换为完整的对齐结果（CIGAR、NM、得分）。
+///
+/// 对链的两端及链内种子间的 gap 分别调用带状 SW（左端用 `extend_left`，右端用 `extend_right`，
+/// 链内 gap 用 `global_align`），最终拼接 CIGAR 并在两端补软裁剪（`S`）。
+/// 使用预分配的 `SwBuffer` 避免热路径内存分配。
 pub fn chain_to_alignment(chain: &Chain, query: &[u8], reference: &[u8], p: SwParams) -> ChainAlignResult {
     chain_to_alignment_buf(chain, query, reference, p, &mut SwBuffer::new())
 }
 
+/// 同 [`chain_to_alignment`]，但接受外部 `SwBuffer` 以供跨调用复用，减少内存分配。
 pub fn chain_to_alignment_buf(
     chain: &Chain,
     query: &[u8],
@@ -56,7 +65,7 @@ pub fn chain_to_alignment_buf(
     if first_seed.qb > 0 && first_seed.rb > 0 {
         let left_q = &query[..first_seed.qb];
         let ref_left_end = first_seed.rb as usize;
-        let ref_left_span = (left_q.len() + p.band_width + 32).min(ref_left_end);
+        let ref_left_span = (left_q.len() + p.band_width + EXTEND_REF_PAD).min(ref_left_end);
         let ref_left_start = ref_left_end - ref_left_span;
         let left_r = &reference[ref_left_start..ref_left_end];
         let left_ext = sw::extend_left(left_q, left_r, p, zdrop);
@@ -122,7 +131,7 @@ pub fn chain_to_alignment_buf(
     if last_seed.qe < query.len() && (last_seed.re as usize) < reference.len() {
         let right_q = &query[last_seed.qe..];
         let ref_right_start = last_seed.re as usize;
-        let ref_right_end = (ref_right_start + right_q.len() + p.band_width + 32).min(reference.len());
+        let ref_right_end = (ref_right_start + right_q.len() + p.band_width + EXTEND_REF_PAD).min(reference.len());
         let right_r = &reference[ref_right_start..ref_right_end];
         let right_ext = sw::extend_right(right_q, right_r, p, zdrop);
         if right_ext.score > 0 && !right_ext.ops.is_empty() {

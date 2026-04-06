@@ -2,6 +2,9 @@ use std::collections::{HashMap, HashSet};
 
 use super::seed::MemSeed;
 
+/// 每个 contig 最多贪心剥离的链数
+const MAX_CHAINS_PER_CONTIG: usize = 5;
+
 /// 种子链结构
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Chain {
@@ -10,7 +13,11 @@ pub struct Chain {
     pub score: u32,
 }
 
-/// 从种子集合中构建最佳链（DP 方法）
+/// 用 DP 方法从种子集合中找到得分最高的单条链。
+///
+/// 按 `(contig, qb, rb)` 排序后做链式 DP，不允许跨 contig 或 query/ref 上有重叠，
+/// gap（query 侧或 ref 侧）超过 `max_gap` 的种子对不能链接。
+/// 返回 `None` 当且仅当 `seeds` 为空。
 pub fn best_chain(seeds: &[MemSeed], max_gap: usize) -> Option<Chain> {
     if seeds.is_empty() {
         return None;
@@ -70,7 +77,7 @@ pub fn best_chain(seeds: &[MemSeed], max_gap: usize) -> Option<Chain> {
     chain_idxs.reverse();
 
     let contig = seeds[chain_idxs[0]].contig;
-    let seeds_vec: Vec<MemSeed> = chain_idxs.into_iter().map(|i| seeds[i].clone()).collect();
+    let seeds_vec: Vec<MemSeed> = chain_idxs.into_iter().map(|i| seeds[i]).collect();
     let score = dp[best_t];
 
     Some(Chain {
@@ -81,6 +88,8 @@ pub fn best_chain(seeds: &[MemSeed], max_gap: usize) -> Option<Chain> {
 }
 
 /// 构建所有可能的链（返回多条链，按得分排序）
+/// 对种子集合按 contig 分组，每组内贪心剥离出最多 [`MAX_CHAINS_PER_CONTIG`] 条链，
+/// 全部链按得分降序、contig 升序、参考区间和 query 区间确定性排序后返回。
 pub fn build_chains(seeds: &[MemSeed], max_gap: usize) -> Vec<Chain> {
     if seeds.is_empty() {
         return Vec::new();
@@ -89,7 +98,7 @@ pub fn build_chains(seeds: &[MemSeed], max_gap: usize) -> Vec<Chain> {
     // 按 contig 分组
     let mut by_contig: HashMap<usize, Vec<MemSeed>> = HashMap::new();
     for s in seeds {
-        by_contig.entry(s.contig).or_default().push(s.clone());
+        by_contig.entry(s.contig).or_default().push(*s);
     }
 
     let mut contig_groups: Vec<(usize, Vec<MemSeed>)> = by_contig.into_iter().collect();
@@ -99,7 +108,7 @@ pub fn build_chains(seeds: &[MemSeed], max_gap: usize) -> Vec<Chain> {
     for (_contig_id, contig_seeds) in contig_groups {
         // 提取多条链（贪心剥离）
         let mut remaining = contig_seeds;
-        for _ in 0..5 {
+        for _ in 0..MAX_CHAINS_PER_CONTIG {
             if remaining.is_empty() {
                 break;
             }
@@ -119,8 +128,11 @@ pub fn build_chains(seeds: &[MemSeed], max_gap: usize) -> Vec<Chain> {
     chains
 }
 
-/// 链过滤：去除弱链和冗余链
-/// 类似 BWA 的 mem_chain_flt
+/// 过滤弱链和冗余链（类似 BWA 的 `mem_chain_flt`）。
+///
+/// 首先移除得分低于最佳链 `min_score_ratio` 倍的链；
+/// 然后在同一 contig 上，若两条链的 query 区间重叠率 > 80% 且 ref 区间重叠率 > 80%，
+/// 保留得分更高的链（即先出现的），丢弃另一条。
 pub fn filter_chains(chains: &mut Vec<Chain>, min_score_ratio: f64) {
     if chains.is_empty() {
         return;

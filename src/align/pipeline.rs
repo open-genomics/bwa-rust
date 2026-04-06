@@ -2,6 +2,9 @@ use anyhow::Result;
 use std::io::Write;
 use std::sync::Arc;
 
+/// 每条 read 最多输出的比对记录数（含主比对 + 次优比对）
+const MAX_ALIGNMENTS_PER_READ: usize = 5;
+
 use rayon::prelude::*;
 
 use crate::index::fm::FMIndex;
@@ -48,12 +51,11 @@ pub fn align_fastq_with_fm_opt(
 
     // 仅在多线程模式下创建自定义 rayon 线程池，单线程直接顺序执行以减少开销
     let pool = if opt.threads > 1 {
-        Some(
-            rayon::ThreadPoolBuilder::new()
-                .num_threads(opt.threads)
-                .build()
-                .unwrap_or_else(|_| rayon::ThreadPoolBuilder::new().build().unwrap()),
-        )
+        let p = rayon::ThreadPoolBuilder::new()
+            .num_threads(opt.threads)
+            .build()
+            .map_err(|e| anyhow::anyhow!("failed to build thread pool with {} threads: {}", opt.threads, e))?;
+        Some(p)
     } else {
         None
     };
@@ -104,8 +106,9 @@ pub(crate) fn align_single_read(fm: &FMIndex, rec: &FastqRecord, sw_params: SwPa
     let seq = &rec.seq;
     let qual = &rec.qual;
 
-    let seq_fwd = String::from_utf8_lossy(seq).into_owned();
-    let qual_fwd = String::from_utf8_lossy(qual).into_owned();
+    // DNA/QUAL 序列均为有效 ASCII（解析时已验证），直接转换无需 lossy 路径
+    let seq_fwd = String::from_utf8(seq.to_vec()).expect("FASTQ sequence must be valid UTF-8/ASCII");
+    let qual_fwd = String::from_utf8(qual.to_vec()).expect("FASTQ quality must be valid UTF-8/ASCII");
 
     if seq.is_empty() {
         return vec![sam::format_unmapped(qname, &seq_fwd, &qual_fwd)];
@@ -149,17 +152,16 @@ pub(crate) fn align_single_read(fm: &FMIndex, rec: &FastqRecord, sw_params: SwPa
         return vec![sam::format_unmapped(qname, &seq_fwd, &qual_fwd)];
     }
 
-    let mut sam_lines = Vec::with_capacity(all_candidates.len().min(5));
+    let mut sam_lines = Vec::with_capacity(all_candidates.len().min(MAX_ALIGNMENTS_PER_READ));
 
     let needs_rev_output = all_candidates
         .iter()
-        .take(5)
+        .take(MAX_ALIGNMENTS_PER_READ)
         .any(|cand| cand.sort_score >= opt.score_threshold && cand.is_rev);
     let (seq_rev, qual_rev) = if needs_rev_output {
-        (
-            String::from_utf8_lossy(&rc_seq).into_owned(),
-            qual.iter().rev().map(|&b| b as char).collect(),
-        )
+        let s = String::from_utf8(rc_seq.clone()).expect("reverse-complement sequence must be valid UTF-8/ASCII");
+        let q: String = qual.iter().rev().map(|&b| b as char).collect();
+        (s, q)
     } else {
         (String::new(), String::new())
     };
@@ -227,7 +229,7 @@ pub(crate) fn align_single_read(fm: &FMIndex, rec: &FastqRecord, sw_params: SwPa
         ));
 
         // 限制输出的比对数量
-        if idx >= 4 {
+        if idx + 1 >= MAX_ALIGNMENTS_PER_READ {
             break;
         }
     }

@@ -1,5 +1,11 @@
-pub const SIGMA: usize = 6; // {0:$, 1:A, 2:C, 3:G, 4:T, 5:N}
+/// 字母表大小：`{0:$, 1:A, 2:C, 3:G, 4:T/U, 5:N}`
+pub const SIGMA: usize = 6;
 
+/// 将 ASCII 碱基字节编码为内部字母表索引（0–5）。
+///
+/// - `0`（sentinel `$`）→ 0
+/// - `A`/`a` → 1，`C`/`c` → 2，`G`/`g` → 3，`T`/`t`/`U`/`u` → 4，`N`/`n` → 5
+/// - 其余未知字符映射到 5（等同 `N`）
 #[inline]
 #[must_use]
 pub fn to_alphabet(b: u8) -> u8 {
@@ -16,6 +22,9 @@ pub fn to_alphabet(b: u8) -> u8 {
     }
 }
 
+/// 将内部字母表索引解码回大写 ASCII 碱基字节。
+///
+/// 0 → 0（sentinel），1 → `A`，2 → `C`，3 → `G`，4 → `T`，5/其他 → `N`
 #[inline]
 #[must_use]
 pub fn from_alphabet(a: u8) -> u8 {
@@ -30,6 +39,11 @@ pub fn from_alphabet(a: u8) -> u8 {
     }
 }
 
+/// 将原始碱基序列归一化为大写 `{A, C, G, T, N}`。
+///
+/// - 小写转大写
+/// - `U`/`u` → `T`
+/// - 其余未知字符 → `N`
 #[must_use]
 pub fn normalize_seq(seq: &[u8]) -> Vec<u8> {
     let mut out = Vec::with_capacity(seq.len());
@@ -45,6 +59,7 @@ pub fn normalize_seq(seq: &[u8]) -> Vec<u8> {
     out
 }
 
+/// 返回单个碱基的互补碱基（大小写均支持）。未知字符返回 `N`。
 #[inline]
 #[must_use]
 pub fn complement(base: u8) -> u8 {
@@ -57,6 +72,7 @@ pub fn complement(base: u8) -> u8 {
     }
 }
 
+/// 返回序列的反向互补（reverse complement）。长度不变。
 #[must_use]
 pub fn revcomp(seq: &[u8]) -> Vec<u8> {
     let mut out = Vec::with_capacity(seq.len());

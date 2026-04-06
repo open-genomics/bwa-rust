@@ -82,6 +82,7 @@ pub struct ExtendResult {
     pub ops: Vec<char>,
 }
 
+/// Smith-Waterman 评分参数。
 #[derive(Clone, Copy, Debug)]
 pub struct SwParams {
     pub match_score: i32,
@@ -91,6 +92,7 @@ pub struct SwParams {
     pub band_width: usize,
 }
 
+/// Smith-Waterman 对齐结果。
 #[derive(Debug, PartialEq, Eq)]
 pub struct SwResult {
     pub score: i32,
@@ -114,6 +116,7 @@ pub fn global_align(query: &[u8], reference: &[u8], p: SwParams) -> SwResult {
     global_align_with_buf(query, reference, p, &mut SwBuffer::new())
 }
 
+/// 同 [`global_align`]，但接受外部 [`SwBuffer`] 复用内存。
 pub fn global_align_with_buf(query: &[u8], reference: &[u8], p: SwParams, buf: &mut SwBuffer) -> SwResult {
     let m = query.len();
     let n = reference.len();
@@ -278,6 +281,7 @@ pub fn semiglobal_align(query: &[u8], reference: &[u8], p: SwParams) -> SwResult
     semiglobal_align_with_buf(query, reference, p, &mut SwBuffer::new())
 }
 
+/// 同 [`semiglobal_align`]，但接受外部 [`SwBuffer`] 复用内存。
 pub fn semiglobal_align_with_buf(query: &[u8], reference: &[u8], p: SwParams, buf: &mut SwBuffer) -> SwResult {
     let m = query.len();
     let n = reference.len();
@@ -499,6 +503,7 @@ impl SwBuffer {
     }
 }
 
+/// 同 [`banded_sw`]，但接受外部 [`SwBuffer`] 以复用 DP 矩阵内存，适用于热路径。
 pub fn banded_sw_with_buf(query: &[u8], reference: &[u8], p: SwParams, buf: &mut SwBuffer) -> SwResult {
     let m = query.len();
     let n = reference.len();
@@ -683,6 +688,7 @@ pub fn banded_sw_with_buf(query: &[u8], reference: &[u8], p: SwParams, buf: &mut
     }
 }
 
+/// 将 CIGAR ops 列表压缩为标准 CIGAR 字符串（游程编码），例如 `['M','M','I','M']` → `"2M1I1M"`。
 pub fn ops_to_cigar(ops: &[char]) -> String {
     let mut cigar = String::new();
     if ops.is_empty() {
@@ -904,13 +910,17 @@ pub fn extend_right(query: &[u8], reference: &[u8], p: SwParams, zdrop: i32) -> 
 
 /// 从 query/ref 末尾向左做半全局扩展（将两者翻转后调用 extend_right，再翻转结果）。
 pub fn extend_left(query: &[u8], reference: &[u8], p: SwParams, zdrop: i32) -> ExtendResult {
-    let rq: Vec<u8> = query.iter().rev().cloned().collect();
-    let rr: Vec<u8> = reference.iter().rev().cloned().collect();
+    let rq: Vec<u8> = query.iter().rev().copied().collect();
+    let rr: Vec<u8> = reference.iter().rev().copied().collect();
     let mut res = extend_right(&rq, &rr, p, zdrop);
     res.ops.reverse();
     res
 }
 
+/// 解析 CIGAR 字符串为 `(操作符, 长度)` 列表，例如 `"3M1I2M"` → `[('M',3),('I',1),('M',2)]`。
+///
+/// 当前实现不校验操作符是否合法；未知操作符会被原样保留。
+/// 若字符串以纯数字结尾且缺少操作符，则该尾部长度会被忽略。
 pub fn parse_cigar(cigar: &str) -> Vec<(char, usize)> {
     let mut result = Vec::new();
     let mut num = 0usize;
@@ -1035,6 +1045,18 @@ mod tests {
     fn parse_cigar_empty() {
         let parsed = parse_cigar("");
         assert!(parsed.is_empty());
+    }
+
+    #[test]
+    fn parse_cigar_ignores_trailing_length_without_op() {
+        let parsed = parse_cigar("10");
+        assert!(parsed.is_empty());
+    }
+
+    #[test]
+    fn parse_cigar_keeps_unknown_ops_verbatim() {
+        let parsed = parse_cigar("3M2X1M");
+        assert_eq!(parsed, vec![('M', 3), ('X', 2), ('M', 1)]);
     }
 
     #[test]

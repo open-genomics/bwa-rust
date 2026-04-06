@@ -22,6 +22,12 @@ pub struct AlignCandidate {
     pub contig_idx: usize,
 }
 
+/// 从 FM 索引查找种子、构建链并执行 SW 对齐，将所有候选结果追加到 `candidates`。
+///
+/// - `query_norm`：归一化（大写 ACGTN）的 query 字节序列
+/// - `query_alpha`：对应的字母表编码序列（`dna::to_alphabet`）
+/// - `is_rev`：该 query 是否为反向互补链
+/// - `opt`：比对参数（含 `min_seed_len`、`clip_penalty` 等）
 pub fn collect_candidates(
     fm: &FMIndex,
     query_norm: &[u8],
@@ -176,6 +182,8 @@ fn soft_clipped_bases(cigar: &str) -> usize {
         .sum()
 }
 
+/// 对已按得分排序的候选列表进行原地去重：
+/// 相同 contig、相同位置（`pos1`）、相同方向（`is_rev`）的候选只保留得分最高的一条（即第一条）。
 pub fn dedup_candidates(candidates: &mut Vec<AlignCandidate>) {
     let mut keep = vec![true; candidates.len()];
     for i in 0..candidates.len() {

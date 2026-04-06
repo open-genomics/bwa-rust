@@ -27,7 +27,7 @@ pub struct AlnReg {
 }
 
 /// MEM 种子
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct MemSeed {
     pub contig: usize,
     pub qb: usize,
@@ -141,7 +141,7 @@ fn dedup_seeds(seeds: &mut Vec<MemSeed>) {
     seeds.dedup();
 }
 
-/// 向后兼容的 MEM 种子查找（保留原有接口）
+/// 向后兼容的 MEM 种子查找（等价于 [`find_smem_seeds`]，保留原有接口）。
 pub fn find_mem_seeds(fm: &FMIndex, query_alpha: &[u8], min_len: usize) -> Vec<MemSeed> {
     find_smem_seeds(fm, query_alpha, min_len)
 }
