@@ -6,8 +6,9 @@ use crate::util::dna;
 
 use super::extend::chain_to_alignment_buf;
 use super::extend::ChainAlignResult;
+use super::seed::find_smem_seeds_with_max_occ;
 use super::sw;
-use super::{build_chains, filter_chains, find_smem_seeds};
+use super::{build_chains_with_limit, filter_chains};
 use super::{AlignOpt, SwParams};
 
 #[derive(Debug, Clone)]
@@ -27,7 +28,7 @@ pub struct AlignCandidate {
 /// - `query_norm`：归一化（大写 ACGTN）的 query 字节序列
 /// - `query_alpha`：对应的字母表编码序列（`dna::to_alphabet`）
 /// - `is_rev`：该 query 是否为反向互补链
-/// - `opt`：比对参数（含 `min_seed_len`、`clip_penalty` 等）
+/// - `opt`：比对参数（含 `min_seed_len`、`clip_penalty`、`max_occ` 等）
 pub fn collect_candidates(
     fm: &FMIndex,
     query_norm: &[u8],
@@ -44,13 +45,13 @@ pub fn collect_candidates(
 
     // BWA 风格：min_seed_len 默认 19，但不超过 read 长度的一半
     let min_mem_len = opt.min_seed_len.min(len / 2 + 1).max(1);
-    let seeds = find_smem_seeds(fm, query_alpha, min_mem_len);
+    let seeds = find_smem_seeds_with_max_occ(fm, query_alpha, min_mem_len, opt.max_occ);
     if seeds.is_empty() {
         return;
     }
 
     // 构建多条链
-    let mut chains = build_chains(&seeds, len);
+    let mut chains = build_chains_with_limit(&seeds, len, opt.max_chains_per_contig);
     filter_chains(&mut chains, 0.3);
 
     let mut sw_buf = sw::SwBuffer::new();

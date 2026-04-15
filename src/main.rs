@@ -116,7 +116,7 @@ fn build_align_opt(
     score_threshold: i32,
     threads: usize,
 ) -> align::AlignOpt {
-    align::AlignOpt {
+    let opt = align::AlignOpt {
         match_score,
         mismatch_penalty,
         gap_open,
@@ -126,7 +126,13 @@ fn build_align_opt(
         score_threshold,
         min_seed_len: 19,
         threads,
+        ..align::AlignOpt::default()
+    };
+    if let Err(e) = opt.validate() {
+        eprintln!("Error: invalid alignment parameters: {}", e);
+        std::process::exit(1);
     }
+    opt
 }
 
 fn main() -> Result<()> {

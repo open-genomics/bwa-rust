@@ -1,67 +1,156 @@
 # Changelog
 
-本文件记录 bwa-rust 项目的所有重要变更。
+All notable changes to this project will be documented in this file.
 
-格式基于 [Keep a Changelog](https://keepachangelog.com/)，版本号遵循 [语义化版本](https://semver.org/)。
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+---
 
 ## [Unreleased]
 
-### 改进
+### ✨ Added
 
-- **比对质量修正**
-  - 修复正向/反向候选在排序前提前做阈值判断，导致强反向命中被误判为 unmapped 的问题
-  - 为链候选增加局部窗口全长重比对（semi-global refinement），改善 mismatch / indel 的 CIGAR 与 NM
-  - 引入软剪切惩罚参与候选排序，避免免费 soft-clip 长期压过真实的单碱基 indel
-  - `mem` 样例中的 insertion / deletion read 现在会输出真实 `I/D`，不再被假全长 `M` 或过度软剪切掩盖
+#### Memory Protection Configuration
 
-- **输入校验增强**
-  - FASTA header 缺少序列名时直接报错
-  - FASTA 空序列和重复 contig 名在建索引阶段拒绝通过
-  - `--threads 0` 现在会在 CLI 层直接报错，而不是静默回退到默认线程池
+New configurable limits to prevent memory explosion on repetitive sequences:
 
-- **GitHub Pages 工作流优化**
-  - 修复 paths 触发器引用错误的文件名（`docs.yml` → `pages.yml`）
-  - 添加 sparse-checkout，仅拉取 `site/` 和 `package.json`，跳过源码和构建产物
-  - Node.js 20 → 22（当前 LTS），启用 npm 缓存加速依赖安装
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `max_occ` | 500 | Skip seeds with more occurrences |
+| `max_chains_per_contig` | 5 | Limit chains extracted per contig |
+| `max_alignments_per_read` | 5 | Limit output alignments per read |
 
-- **VitePress 配置增强**
-  - 启用 `cleanUrls`（去除 `.html` 后缀）
-  - 启用根级 `lastUpdated`（显示页面最后更新时间）
-  - 添加 sitemap 生成（SEO）
-  - 添加 Open Graph 元标签（社交分享预览）
-  - 添加 `theme-color` 元标签
+- Added `AlignOpt::validate()` method for comprehensive parameter validation
 
-- **文档站内容丰富**
-  - 首页新增"架构设计"快捷入口按钮
-  - 首页新增"Rust 内存安全"和"133 项测试全通过"两个特性卡片
-  - 丰富已有特性卡片描述（SAM header、magic number 等）
-  - 中英文首页同步更新
+### 🐛 Fixed
 
-- **README 徽章补齐**
-  - 英文 README 新增 Docs、Rust 版本徽章，与中文 README 保持一致
+#### Alignment Quality
+
+- **Candidate Filtering**: Fixed premature threshold filtering before sorting forward/reverse candidates
+  - Strong reverse hits are no longer incorrectly marked as unmapped
+- **Semi-global Refinement**: Added refinement for chain candidates
+  - Improves mismatch/indel CIGAR and NM tag accuracy
+  - Insertion/deletion reads now output real `I/D` CIGAR instead of fake full-length `M`
+- **Clip Penalty**: Introduced clip penalty for candidate ranking
+  - Prevents free soft-clips from masking single-base indels
+
+#### Input Validation
+
+- FASTA header without sequence name now raises clear error
+- Empty sequences rejected during index build
+- Duplicate contig names rejected during index build
+- `--threads 0` now errors at CLI level instead of silent fallback
+
+#### Error Handling
+
+- Replaced double `unwrap` with proper error propagation in rayon thread pool
+- Thread pool construction failures now return clear error messages
+
+### 🔧 Changed
+
+#### Code Quality
+
+- Extracted named constants, eliminated magic numbers:
+  - `MAX_ALIGNMENTS_PER_READ`, `MAX_CHAINS_PER_CONTIG`, `EXTEND_REF_PAD`, `DEFAULT_MAX_OCC`
+- Added `Copy` trait to `MemSeed`, removed unnecessary clones
+- Replaced `.cloned()` with `.copied()` for `Copy` types
+- Removed `from_utf8_lossy(...).into_owned()` in hot paths
+
+#### Documentation
+
+- Added comprehensive doc comments to public APIs:
+  - `chain.rs`, `candidate.rs`, `extend.rs`, `sw.rs`, `seed.rs`, `dna.rs`
+- Added `parse_cigar` boundary behavior tests
+
+### ⚡ Performance
+
+- Optimized read/qual and reverse-complement string construction paths
+
+---
 
 ## [0.1.0] - 2026-02-13
 
-### 新增
+### ✨ Added
 
-- **索引构建** (`index` 子命令)
-  - FASTA 解析器（支持多 contig、不同换行符、非标准字符过滤）
-  - 倍增法后缀数组（SA）构建
-  - BWT 构建
-  - FM 索引（C 表、分块 Occ 采样、稀疏 SA 采样）
-  - 索引序列化为 `.fm` 文件（含 magic number、版本号、构建元数据）
+#### Index Building (`index` subcommand)
 
-- **序列比对** (`align` 子命令)
-  - SMEM 种子查找（超级最大精确匹配）
-  - 种子链构建与过滤（DP + 贪心剥离）
-  - 带状仿射间隙 Smith-Waterman 局部对齐
-  - 正向 / 反向互补双向比对
-  - 多链候选去重、主/次要比对输出
-  - MAPQ 估算（基于主次候选得分差）
-  - SAM 格式输出（含 header、CIGAR、AS/XS/NM 标签）
-  - 多线程并行处理（`--threads` 参数，基于 rayon）
+| Feature | Description |
+|---------|-------------|
+| FASTA Parser | Multi-contig support, various line endings, non-standard character filtering |
+| Suffix Array | Doubling algorithm, O(n log²n) complexity |
+| BWT Construction | Built from suffix array |
+| FM Index | C table + block-based Occ sampling + sparse SA sampling |
+| Serialization | Single `.fm` file with magic number, version, and build metadata |
 
-- **工程化**
-  - criterion 基准测试
-  - GitHub Actions CI（fmt、clippy、test、release build）
-  - 架构文档、教程、示例代码
+#### Sequence Alignment (`align` subcommand)
+
+| Feature | Description |
+|---------|-------------|
+| SMEM Seeding | Super-Maximal Exact Match seed finding |
+| Seed Chaining | DP-based chain scoring + greedy peeling + filtering |
+| Smith-Waterman | Banded affine-gap local alignment with CIGAR generation |
+| Bidirectional | Forward and reverse-complement alignment |
+| Candidate Management | Multi-chain deduplication, primary/secondary output |
+| MAPQ Estimation | Based on primary/secondary score difference |
+| SAM Output | Full header, CIGAR, AS/XS/NM tags |
+| Multi-threading | Parallel processing via rayon (`--threads`) |
+
+#### One-Step Alignment (`mem` subcommand)
+
+- BWA-MEM style one-command workflow
+- BWA-MEM default scoring: match=1, mismatch=4, gap-open=6, gap-ext=1
+
+#### Engineering
+
+- **Benchmarks**: Criterion performance tests
+- **CI/CD**: GitHub Actions (fmt → clippy → test → release build)
+- **Documentation**: Architecture docs, tutorial, example code
+- **Test Coverage**: 167 tests total (151 unit + 11 integration + 5 module tests)
+
+---
+
+## Version History
+
+| Version | Date | Highlights |
+|---------|------|------------|
+| Unreleased | — | Memory protection, alignment quality fixes, code quality improvements |
+| 0.1.0 | 2026-02-13 | Initial release: FM index, SMEM seeding, banded SW, SAM output, multi-threading |
+
+---
+
+## Migration Guide
+
+### From v0.1.0 to Unreleased
+
+**No breaking changes**. All new features are backward compatible:
+
+- New `AlignOpt` fields have sensible defaults
+- Existing CLI commands work unchanged
+- `.fm` index format unchanged (version 2)
+
+### New CLI Options (Unreleased)
+
+```bash
+# Limit repetitive seeds (default: 500)
+bwa-rust align -i ref.fm reads.fq --max-occ 200
+
+# Limit chains per contig (default: 5)
+bwa-rust mem ref.fa reads.fq --max-chains 3
+
+# Limit output alignments per read (default: 5)
+bwa-rust mem ref.fa reads.fq --max-alignments 10
+```
+
+---
+
+## Release Checklist
+
+Before each release, ensure:
+
+- [ ] `cargo fmt --all -- --check` passes
+- [ ] `cargo clippy --all-targets --all-features -- -D warnings` passes
+- [ ] `cargo test --all-targets --all-features` passes
+- [ ] `cargo build --release` succeeds
+- [ ] CHANGELOG.md updated with release date
+- [ ] Git tag created: `v{version}`

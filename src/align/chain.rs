@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use super::seed::MemSeed;
 
 /// 每个 contig 最多贪心剥离的链数
-const MAX_CHAINS_PER_CONTIG: usize = 5;
+pub const DEFAULT_MAX_CHAINS_PER_CONTIG: usize = 5;
 
 /// 种子链结构
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -88,9 +88,14 @@ pub fn best_chain(seeds: &[MemSeed], max_gap: usize) -> Option<Chain> {
 }
 
 /// 构建所有可能的链（返回多条链，按得分排序）
-/// 对种子集合按 contig 分组，每组内贪心剥离出最多 [`MAX_CHAINS_PER_CONTIG`] 条链，
+/// 对种子集合按 contig 分组，每组内贪心剥离出最多 `max_chains_per_contig` 条链，
 /// 全部链按得分降序、contig 升序、参考区间和 query 区间确定性排序后返回。
 pub fn build_chains(seeds: &[MemSeed], max_gap: usize) -> Vec<Chain> {
+    build_chains_with_limit(seeds, max_gap, DEFAULT_MAX_CHAINS_PER_CONTIG)
+}
+
+/// 同 [`build_chains`]，但可指定每个 contig 的最大链数。
+pub fn build_chains_with_limit(seeds: &[MemSeed], max_gap: usize, max_chains_per_contig: usize) -> Vec<Chain> {
     if seeds.is_empty() {
         return Vec::new();
     }
@@ -108,7 +113,7 @@ pub fn build_chains(seeds: &[MemSeed], max_gap: usize) -> Vec<Chain> {
     for (_contig_id, contig_seeds) in contig_groups {
         // 提取多条链（贪心剥离）
         let mut remaining = contig_seeds;
-        for _ in 0..MAX_CHAINS_PER_CONTIG {
+        for _ in 0..max_chains_per_contig {
             if remaining.is_empty() {
                 break;
             }
@@ -602,5 +607,64 @@ mod tests {
         // max_gap = 10, gap between seeds = 95
         let chain = best_chain(&seeds, 10).unwrap();
         assert_eq!(chain.seeds.len(), 1); // can't chain across large gap
+    }
+
+    #[test]
+    fn build_chains_with_limit_respects_limit() {
+        let seeds = vec![
+            MemSeed {
+                contig: 0,
+                qb: 0,
+                qe: 4,
+                rb: 0,
+                re: 4,
+            },
+            MemSeed {
+                contig: 0,
+                qb: 4,
+                qe: 8,
+                rb: 4,
+                re: 8,
+            },
+            MemSeed {
+                contig: 0,
+                qb: 0,
+                qe: 4,
+                rb: 100,
+                re: 104,
+            },
+            MemSeed {
+                contig: 0,
+                qb: 4,
+                qe: 8,
+                rb: 104,
+                re: 108,
+            },
+            MemSeed {
+                contig: 0,
+                qb: 0,
+                qe: 4,
+                rb: 200,
+                re: 204,
+            },
+            MemSeed {
+                contig: 0,
+                qb: 4,
+                qe: 8,
+                rb: 204,
+                re: 208,
+            },
+        ];
+        // With limit 1, only one chain per contig
+        let chains = build_chains_with_limit(&seeds, 10, 1);
+        assert_eq!(chains.len(), 1);
+
+        // With limit 2, up to two chains
+        let chains = build_chains_with_limit(&seeds, 10, 2);
+        assert!(chains.len() <= 2);
+
+        // With default limit, should get more
+        let chains_default = build_chains(&seeds, 10);
+        assert!(chains_default.len() >= chains.len());
     }
 }

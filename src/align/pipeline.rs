@@ -2,9 +2,6 @@ use anyhow::Result;
 use std::io::Write;
 use std::sync::Arc;
 
-/// 每条 read 最多输出的比对记录数（含主比对 + 次优比对）
-const MAX_ALIGNMENTS_PER_READ: usize = 5;
-
 use rayon::prelude::*;
 
 use crate::index::fm::FMIndex;
@@ -152,11 +149,12 @@ pub(crate) fn align_single_read(fm: &FMIndex, rec: &FastqRecord, sw_params: SwPa
         return vec![sam::format_unmapped(qname, &seq_fwd, &qual_fwd)];
     }
 
-    let mut sam_lines = Vec::with_capacity(all_candidates.len().min(MAX_ALIGNMENTS_PER_READ));
+    let max_aln = opt.max_alignments_per_read;
+    let mut sam_lines = Vec::with_capacity(all_candidates.len().min(max_aln));
 
     let needs_rev_output = all_candidates
         .iter()
-        .take(MAX_ALIGNMENTS_PER_READ)
+        .take(max_aln)
         .any(|cand| cand.sort_score >= opt.score_threshold && cand.is_rev);
     let (seq_rev, qual_rev) = if needs_rev_output {
         let s = String::from_utf8(rc_seq.clone()).expect("reverse-complement sequence must be valid UTF-8/ASCII");
@@ -229,7 +227,7 @@ pub(crate) fn align_single_read(fm: &FMIndex, rec: &FastqRecord, sw_params: SwPa
         ));
 
         // 限制输出的比对数量
-        if idx + 1 >= MAX_ALIGNMENTS_PER_READ {
+        if idx + 1 >= max_aln {
             break;
         }
     }
@@ -387,6 +385,7 @@ mod tests {
             score_threshold: 10,
             min_seed_len: 19,
             threads: 1,
+            ..AlignOpt::default()
         };
 
         let lines = align_single_read(&fm, &rec, sw, &opt);
@@ -426,6 +425,7 @@ mod tests {
             score_threshold: 10,
             min_seed_len: 19,
             threads: 1,
+            ..AlignOpt::default()
         };
 
         let lines = align_single_read(&fm, &rec, sw, &opt);
@@ -460,6 +460,7 @@ mod tests {
             score_threshold: 10,
             min_seed_len: 19,
             threads: 1,
+            ..AlignOpt::default()
         };
 
         let lines = align_single_read(&fm, &rec, sw, &opt);
@@ -494,6 +495,7 @@ mod tests {
             score_threshold: 10,
             min_seed_len: 19,
             threads: 1,
+            ..AlignOpt::default()
         };
 
         let lines = align_single_read(&fm, &rec, sw, &opt);

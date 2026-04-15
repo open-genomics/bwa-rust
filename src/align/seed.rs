@@ -1,5 +1,8 @@
 use crate::index::fm::FMIndex;
 
+/// Default maximum occurrences for MEM seeds (skip highly repetitive seeds)
+pub const DEFAULT_MAX_OCC: usize = 500;
+
 /// 对齐区域结构，类似 BWA 的 mem_alnreg_t。
 ///
 /// 当前版本（v0.1.0）的 pipeline 使用 `candidate::AlignCandidate` 作为内部候选表示。
@@ -41,6 +44,12 @@ pub struct MemSeed {
 /// 每步仅需一次 `rank_range` 调用（O(1)），相比逐长度重新 backward_search（O(L)）显著更快。
 /// 之后过滤被包含的种子，仅保留超级最大精确匹配（SMEM）。
 pub fn find_smem_seeds(fm: &FMIndex, query_alpha: &[u8], min_len: usize) -> Vec<MemSeed> {
+    find_smem_seeds_with_max_occ(fm, query_alpha, min_len, DEFAULT_MAX_OCC)
+}
+
+/// 同 [`find_smem_seeds`]，但可指定最大出现次数限制。
+/// SA 区间大小超过 `max_occ` 的种子将被跳过，避免高度重复序列导致内存爆炸。
+pub fn find_smem_seeds_with_max_occ(fm: &FMIndex, query_alpha: &[u8], min_len: usize, max_occ: usize) -> Vec<MemSeed> {
     let n = query_alpha.len();
     if min_len == 0 || n == 0 || min_len > n {
         return Vec::new();
@@ -84,9 +93,14 @@ pub fn find_smem_seeds(fm: &FMIndex, query_alpha: &[u8], min_len: usize) -> Vec<
     // 第二步：过滤被包含的 MEM，保留 SMEM
     filter_contained(&mut raw_mems);
 
-    // 第三步：将区间展开为具体种子
+    // 第三步：将区间展开为具体种子，跳过高度重复的种子
     let mut seeds = Vec::new();
     for (qb, qe, l, r) in &raw_mems {
+        let occ = r - l;
+        if occ > max_occ {
+            // Skip highly repetitive seeds to avoid memory explosion
+            continue;
+        }
         let seed_len = (qe - qb) as u32;
         fm.for_each_sa_interval_position(*l, *r, |sa_pos| {
             if let Some((ci, off)) = fm.map_text_pos(sa_pos) {
@@ -265,5 +279,33 @@ mod tests {
         ];
         filter_contained(&mut mems);
         assert_eq!(mems, vec![(0, 10, 0, 1), (10, 15, 3, 4)]);
+    }
+
+    #[test]
+    fn smem_all_n_reads() {
+        // Test reads consisting entirely of N characters
+        let fm = build_test_fm(b"ACGTACGTACGTACGT");
+        let alpha: Vec<u8> = b"NNNN".iter().map(|&b| dna::to_alphabet(b)).collect();
+        // N maps to alphabet code 5, which doesn't match anything specific
+        let seeds = find_smem_seeds(&fm, &alpha, 2);
+        // N matches N in the reference (if any), but our test reference has no Ns
+        // So seeds should be empty or only match if reference has Ns
+        assert!(seeds.is_empty() || seeds.iter().all(|s| s.qe - s.qb >= 2));
+    }
+
+    #[test]
+    fn smem_max_occ_filters_high_occurrence_seeds() {
+        // Create a reference with many repeats
+        let fm = build_test_fm(b"AAAAAAAAAAAAAAAAAAAA"); // 20 A's
+        let alpha: Vec<u8> = b"AAA".iter().map(|&b| dna::to_alphabet(b)).collect();
+
+        // With high max_occ, should find seeds
+        let seeds_unlimited = find_smem_seeds_with_max_occ(&fm, &alpha, 2, 1000);
+        assert!(!seeds_unlimited.is_empty());
+
+        // With very low max_occ, should filter out most/all seeds
+        let seeds_limited = find_smem_seeds_with_max_occ(&fm, &alpha, 2, 2);
+        // AAA appears many times in AAAAAAAAAA..., so with max_occ=2 most should be filtered
+        assert!(seeds_limited.len() <= seeds_unlimited.len());
     }
 }

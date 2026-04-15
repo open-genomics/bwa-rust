@@ -8,6 +8,7 @@
 2. 使用 FM 索引进行精确匹配
 3. 查找 SMEM 种子
 4. 通过种子链 + Smith-Waterman 完成序列比对
+5. 输出标准 SAM 格式
 
 ## 第一步：理解 FM 索引
 
@@ -68,6 +69,8 @@ if let Some((l, r)) = fm_idx.backward_search(&pattern_alpha) {
 
 SMEM（Super-Maximal Exact Match）是 BWA-MEM 的核心概念。对于 read 上的每个位置，找到覆盖该位置的最长精确匹配。
 
+### 基本用法
+
 ```rust
 use bwa_rust::align::find_smem_seeds;
 use bwa_rust::util::dna;
@@ -85,9 +88,22 @@ for seed in &seeds {
 }
 ```
 
+### 内存防护：限制重复种子
+
+对于高度重复序列（如 poly-A 尾巴），种子可能出现数万次。使用 `max_occ` 参数跳过这些种子：
+
+```rust
+use bwa_rust::align::find_smem_seeds_with_max_occ;
+
+// 仅保留出现次数 <= 500 的种子
+let seeds = find_smem_seeds_with_max_occ(&fm_idx, &read_alpha, 5, 500);
+```
+
 ## 第四步：种子链构建
 
 将多个种子组合成一条"链"，选择覆盖度最高、间距合理的种子组合。
+
+### 基本用法
 
 ```rust
 use bwa_rust::align::{build_chains, filter_chains};
@@ -98,9 +114,22 @@ filter_chains(&mut chains, 0.3); // 过滤弱链
 // chains[0] 是得分最高的链
 ```
 
+### 限制链数量
+
+使用 `max_chains_per_contig` 限制每个 contig 提取的链数：
+
+```rust
+use bwa_rust::align::build_chains_with_limit;
+
+// 每个 contig 最多提取 5 条链
+let chains = build_chains_with_limit(&seeds, read_len, 5);
+```
+
 ## 第五步：Smith-Waterman 对齐
 
 在种子链的间隙区域执行带状仿射间隙 Smith-Waterman 局部对齐，得到完整的 CIGAR 和对齐得分。
+
+### 参数配置
 
 ```rust
 use bwa_rust::align::{banded_sw, SwParams};
@@ -116,6 +145,18 @@ let params = SwParams {
 let result = banded_sw(query, reference, params);
 println!("Score: {}, CIGAR: {}, NM: {}", result.score, result.cigar, result.nm);
 ```
+
+### BWA-MEM 默认参数
+
+`mem` 子命令使用 BWA-MEM 默认打分：
+
+| 参数 | 值 | 说明 |
+|------|-----|------|
+| match | 1 | 匹配得分 |
+| mismatch | 4 | 错配罚分 |
+| gap_open | 6 | Gap 开启罚分 |
+| gap_ext | 1 | Gap 扩展罚分 |
+| band_width | 100 | 带宽 |
 
 ## 第六步：SAM 输出
 
@@ -150,6 +191,39 @@ let unmapped = sam::format_unmapped("read2", "NNNN", "!!!!");
 println!("{}", unmapped);
 ```
 
+## 第七步：完整对齐流水线
+
+使用 `AlignOpt` 配置完整的对齐参数：
+
+```rust
+use bwa_rust::align::AlignOpt;
+
+let opt = AlignOpt {
+    // 打分参数
+    match_score: 2,
+    mismatch_penalty: 1,
+    gap_open: 2,
+    gap_extend: 1,
+    clip_penalty: 1,
+
+    // 对齐参数
+    band_width: 16,
+    score_threshold: 20,
+    min_seed_len: 19,
+
+    // 并行参数
+    threads: 4,
+
+    // 内存防护
+    max_occ: 500,              // 跳过高度重复种子
+    max_chains_per_contig: 5,  // 每个 contig 最大链数
+    max_alignments_per_read: 5, // 每 read 最大输出数
+};
+
+// 验证参数
+opt.validate().expect("Invalid AlignOpt");
+```
+
 ## 完整示例
 
 参见 `examples/simple_align.rs`，演示了从构建索引到对齐输出的完整流程。
@@ -158,8 +232,71 @@ println!("{}", unmapped);
 cargo run --example simple_align
 ```
 
+## CLI 使用
+
+### 构建索引
+
+```bash
+# 从 FASTA 参考序列构建 FM 索引
+bwa-rust index data/toy.fa -o data/toy
+# 输出：data/toy.fm
+```
+
+### 比对 Reads
+
+```bash
+# 基本比对
+bwa-rust align -i data/toy.fm data/toy_reads.fq
+
+# 输出到文件
+bwa-rust align -i data/toy.fm data/toy_reads.fq -o output.sam
+
+# 多线程（4 线程）
+bwa-rust align -i data/toy.fm data/toy_reads.fq -t 4
+
+# 自定义打分参数
+bwa-rust align -i data/toy.fm data/toy_reads.fq \
+    --match 2 --mismatch 1 --gap-open 2 --gap-ext 1 --band-width 16
+```
+
+### 一步比对（BWA-MEM 风格）
+
+```bash
+# 构建索引并比对
+bwa-rust mem data/toy.fa data/toy_reads.fq -t 4 -o output.sam
+
+# 使用 BWA-MEM 默认打分
+bwa-rust mem data/toy.fa data/toy_reads.fq \
+    -A 1 -B 4 -O 6 -E 1 -w 100
+```
+
 ## 进阶主题
 
-- **多线程对齐**：使用 `--threads N` 参数启用 rayon 并行处理
-- **稀疏 SA 采样**：`FMIndex::build_sparse()` 可减少内存占用
-- **自定义打分参数**：通过 `--match`/`--mismatch`/`--gap-open`/`--gap-ext` 调整
+### 多线程对齐
+
+使用 `--threads N` 参数启用 rayon 并行处理：
+
+```bash
+bwa-rust mem ref.fa reads.fq -t 8 -o output.sam
+```
+
+内部使用自定义 rayon 线程池，避免全局线程池竞争。
+
+### 内存优化
+
+1. **稀疏 SA 采样**：`FMIndex::build_sparse()` 可减少内存占用
+2. **max_occ 过滤**：跳过高度重复种子，防止内存爆炸
+3. **SwBuffer 复用**：带状 DP 缓冲区复用，减少热路径分配
+
+### 性能调优
+
+```bash
+# 小带宽：快速但对 indel 敏感度低
+bwa-rust align -i ref.fm reads.fq --band-width 16
+
+# 大带宽：慢但对 indel 容忍度高
+bwa-rust align -i ref.fm reads.fq --band-width 64
+
+# 降低阈值：输出更多比对
+bwa-rust align -i ref.fm reads.fq --score-threshold 10
+```
