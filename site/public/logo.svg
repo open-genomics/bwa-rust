@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <defs>
+    <linearGradient id="dna-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#dea584"/>
+      <stop offset="100%" style="stop-color:#c4784a"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background circle -->
+  <circle cx="50" cy="50" r="45" fill="url(#dna-gradient)" opacity="0.1"/>
+
+  <!-- DNA helix representation -->
+  <path d="M30 20 Q50 35 70 20" stroke="url(#dna-gradient)" stroke-width="4" fill="none"/>
+  <path d="M30 40 Q50 55 70 40" stroke="url(#dna-gradient)" stroke-width="4" fill="none"/>
+  <path d="M30 60 Q50 45 70 60" stroke="url(#dna-gradient)" stroke-width="4" fill="none"/>
+  <path d="M30 80 Q50 65 70 80" stroke="url(#dna-gradient)" stroke-width="4" fill="none"/>
+
+  <!-- Base pairs -->
+  <line x1="40" y1="25" x2="60" y2="25" stroke="#dea584" stroke-width="2" stroke-linecap="round"/>
+  <line x1="40" y1="45" x2="60" y2="45" stroke="#dea584" stroke-width="2" stroke-linecap="round"/>
+  <line x1="40" y1="55" x2="60" y2="55" stroke="#dea584" stroke-width="2" stroke-linecap="round"/>
+  <line x1="40" y1="75" x2="60" y2="75" stroke="#dea584" stroke-width="2" stroke-linecap="round"/>
+
+  <!-- Rust gear accent -->
+  <circle cx="80" cy="80" r="12" fill="none" stroke="url(#dna-gradient)" stroke-width="2"/>
+  <circle cx="80" cy="80" r="6" fill="url(#dna-gradient)"/>
+</svg>

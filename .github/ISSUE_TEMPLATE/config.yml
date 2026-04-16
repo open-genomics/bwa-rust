@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 📖 Documentation
+    url: https://lessup.github.io/bwa-rust/
+    about: Check the documentation before opening an issue
+  - name: 💬 GitHub Discussions
+    url: https://github.com/LessUp/bwa-rust/discussions
+    about: Ask questions and discuss with the community
+  - name: 🐛 Known Issues
+    url: https://github.com/LessUp/bwa-rust/labels/bug
+    about: Check existing bug reports before creating a new one

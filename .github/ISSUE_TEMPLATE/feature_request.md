@@ -1,27 +1,50 @@
 ---
-name: 功能请求
-about: 提出一个新功能或改进建议
+name: Feature Request
+about: Suggest a new feature or improvement
 title: '[Feature] '
-labels: enhancement
+labels: enhancement, triage
 assignees: ''
 ---
 
-## 功能描述
+## 💡 Feature Description
 
-简要描述你希望添加的功能。
+A clear and concise description of the feature you'd like to see.
 
-## 动机
+## 🎯 Motivation
 
-为什么需要这个功能？它解决了什么问题？
+Why is this feature needed? What problem does it solve?
 
-## 建议方案
+**Use Case:** Describe a specific scenario where this feature would be useful.
 
-描述你认为可行的实现方式（可选）。
+## 📋 Proposed Solution
 
-## 替代方案
+Describe how you think this should be implemented:
 
-你是否考虑过其他替代方案？（可选）
+```rust
+// Example API usage (optional)
+```
 
-## 额外信息
+## 🔄 Alternatives Considered
 
-如有相关参考资料或链接，请在此附上。
+Have you considered any alternative solutions or workarounds?
+
+## 📊 Impact
+
+| Aspect | Impact |
+|--------|--------|
+| **Performance** | [Describe any performance implications] |
+| **Compatibility** | [Breaking changes?] |
+| **Documentation** | [Docs updates needed?] |
+
+## 📎 Additional Information
+
+- Related issues: #
+- Similar features in other tools: [e.g., BWA, minimap2]
+- References: [papers, documentation links]
+
+---
+
+**Checklist:**
+- [ ] I have searched existing issues and discussions
+- [ ] This feature aligns with project goals
+- [ ] I'm willing to submit a PR for this feature

@@ -1,35 +1,60 @@
 ---
-name: Bug 报告
-about: 报告一个 Bug 以帮助我们改进
+name: Bug Report
+about: Report a bug to help us improve
 title: '[Bug] '
-labels: bug
+labels: bug, triage
 assignees: ''
 ---
 
-## 问题描述
+## 🐛 Bug Description
 
-简要描述遇到的问题。
+A clear and concise description of what the bug is.
 
-## 复现步骤
+## 📋 Steps to Reproduce
 
-1. 执行命令 `...`
-2. 使用输入文件 `...`
-3. 观察到 `...`
+1. Run command:
+   ```bash
+   bwa-rust mem reference.fa reads.fq -o output.sam
+   ```
+2. With input file:
+   ```
+   # Paste relevant input content or attach file
+   ```
+3. Observe error/output:
+   ```
+   # Paste error message or unexpected output
+   ```
 
-## 期望行为
+## ✅ Expected Behavior
 
-描述你期望发生的事情。
+What you expected to happen.
 
-## 实际行为
+## ❌ Actual Behavior
 
-描述实际发生的事情。
+What actually happened.
 
-## 环境信息
+## 🔧 Environment
 
-- **操作系统**: [例如 Ubuntu 22.04]
-- **Rust 版本**: [例如 1.75.0]
-- **bwa-rust 版本**: [例如 0.1.0]
+| Item | Value |
+|------|-------|
+| **OS** | [e.g., Ubuntu 22.04, macOS 14, Windows 11] |
+| **Rust version** | [e.g., 1.75.0] |
+| **bwa-rust version** | [e.g., 0.1.0] |
+| **Installation method** | [from source / pre-built binary] |
 
-## 额外信息
+## 📎 Sample Files (Optional)
 
-如有相关日志、截图或输入文件，请在此附上。
+If applicable, attach sample FASTA/FASTQ files that reproduce the issue:
+- Reference file: [attach or describe]
+- Reads file: [attach or describe]
+
+## 📝 Additional Information
+
+Add any other context, logs, or screenshots about the problem here.
+
+---
+
+**Checklist:**
+- [ ] I have searched existing issues to ensure this is not a duplicate
+- [ ] I have provided all required information
+- [ ] I can reproduce this issue consistently

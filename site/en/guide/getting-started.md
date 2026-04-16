@@ -2,8 +2,12 @@
 
 ## Requirements
 
-- **Rust** 1.70 or later
-- Supports Linux, macOS, Windows
+| Requirement | Version |
+|-------------|---------|
+| Rust | 1.70+ (MSRV) |
+| Platform | Linux / macOS / Windows |
+
+---
 
 ## Installation
 
@@ -17,59 +21,126 @@ cargo build --release
 
 The compiled binary is located at `target/release/bwa-rust`.
 
+### Download Pre-built Binary
+
+Download the binary for your platform from [GitHub Releases](https://github.com/LessUp/bwa-rust/releases).
+
+---
+
 ## Basic Usage
 
 ### Build Index
 
 ```bash
-cargo run --release -- index data/toy.fa -o data/toy
+bwa-rust index data/toy.fa -o data/toy
+# Output: data/toy.fm
 ```
 
 ### Align Reads
 
 ```bash
 # Basic alignment
-cargo run --release -- align -i data/toy.fm data/toy_reads.fq
+bwa-rust align -i data/toy.fm data/toy_reads.fq
 
 # Output to file
-cargo run --release -- align -i data/toy.fm data/toy_reads.fq -o output.sam
+bwa-rust align -i data/toy.fm data/toy_reads.fq -o output.sam
 
 # Multi-threaded alignment
-cargo run --release -- align -i data/toy.fm data/toy_reads.fq -t 4
+bwa-rust align -i data/toy.fm data/toy_reads.fq -t 4
 
 # Custom scoring parameters
-cargo run --release -- align -i data/toy.fm data/toy_reads.fq \
-    --match 2 --mismatch 1 --gap-open 2 --gap-ext 1 --band-width 16
+bwa-rust align -i data/toy.fm data/toy_reads.fq \
+    --match 2 --mismatch 1 --gap-open 2 --gap-ext 1
 ```
 
-## Index Format
+### One-Step Alignment (BWA-MEM Style)
 
-The `index` subcommand accepts a FASTA file and performs the following steps:
+```bash
+# Build index and align
+bwa-rust mem data/toy.fa data/toy_reads.fq -t 4 -o output.sam
 
-1. **Read reference**: Parse FASTA records, normalize bases to `{A,C,G,T,N}`
-2. **Encode to alphabet**: `{0:$, 1:A, 2:C, 3:G, 4:T, 5:N}`, contigs separated by `$`
-3. **Build suffix array**: Doubling algorithm O(n log²n)
-4. **Build BWT**: Derive Burrows-Wheeler Transform from SA
-5. **Build FM index**: Compute C table and block Occ sampling
-6. **Serialize**: Write to `.fm` file using bincode
+# Use BWA-MEM default scoring
+bwa-rust mem data/toy.fa data/toy_reads.fq -A 1 -B 4 -O 6 -E 1
+```
 
-The index file contains a magic number (`BWAFM_RS`) and version number (v2) for compatibility checking.
+---
+
+## CLI Reference
+
+### `index` — Build Index
+
+```bash
+bwa-rust index <reference.fa> -o <prefix>
+```
+
+| Argument | Default | Description |
+|----------|---------|-------------|
+| `<reference.fa>` | required | FASTA reference file |
+| `-o, --output` | `ref` | Output prefix for `.fm` index |
+
+### `align` — Align Against Index
+
+```bash
+bwa-rust align -i <index.fm> <reads.fq> [options]
+```
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `-i, --index` | required | Path to `.fm` index |
+| `<reads.fq>` | required | FASTQ file |
+| `-o, --out` | stdout | Output SAM file |
+| `-t, --threads` | 1 | Number of threads |
+| `--match` | 2 | Match score |
+| `--mismatch` | 1 | Mismatch penalty |
+| `--gap-open` | 2 | Gap open penalty |
+| `--gap-ext` | 1 | Gap extension penalty |
+| `--band-width` | 16 | SW band width |
+| `--score-threshold` | 20 | Minimum alignment score |
+
+### `mem` — One-Step Alignment
+
+```bash
+bwa-rust mem <reference.fa> <reads.fq> [options]
+```
+
+Uses BWA-MEM defaults: match=1, mismatch=4, gap-open=6, gap-ext=1.
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `-o, --out` | stdout | Output SAM file |
+| `-t, --threads` | 1 | Number of threads |
+| `-A, --match` | 1 | Match score |
+| `-B, --mismatch` | 4 | Mismatch penalty |
+| `-O, --gap-open` | 6 | Gap open penalty |
+| `-E, --gap-ext` | 1 | Gap extension penalty |
+| `-w, --band-width` | 100 | SW band width |
+| `-T, --score-threshold` | 10 | Minimum score |
+
+---
 
 ## Features
 
-### Supported
+### ✅ Supported
 
-- Single-end read alignment
-- SMEM seed finding + seed chaining
-- Banded affine-gap Smith-Waterman local alignment
-- SAM output (CIGAR, MAPQ, AS/XS/NM tags)
-- Multi-threaded parallel processing
+| Feature | Description |
+|---------|-------------|
+| Single-end alignment | Forward + reverse complement bidirectional |
+| SMEM seed finding | Super-Maximal Exact Match, `max_occ` filtering |
+| Seed chaining | DP + greedy peeling, `max_chains` limit |
+| Banded SW alignment | Affine gap, semi-global refinement |
+| SAM output | Full header, CIGAR, MAPQ, AS/XS/NM |
+| Multi-threading | Rayon data parallelism |
 
-### Not Yet Supported
+### 📋 Planned
 
-- Paired-end (PE) alignment (planned for v0.2.0)
-- BAM output format
-- Reading BWA native index files
+| Feature | Version |
+|---------|---------|
+| Paired-end (PE) alignment | v0.2.0 |
+| BWA native index reading | v0.3.0 |
+| BAM output format | v0.4.0 |
+| SIMD acceleration | v0.5.0 |
+
+---
 
 ## Library Usage
 
@@ -77,4 +148,37 @@ The index file contains a magic number (`BWAFM_RS`) and version number (v2) for 
 cargo run --example simple_align
 ```
 
-bwa-rust also provides a library API for direct use in Rust projects. See the [Algorithm Tutorial](./tutorial.md) for details.
+bwa-rust provides a library API for direct use in Rust projects. See the [Algorithm Tutorial](./tutorial.md) for details.
+
+---
+
+## FAQ
+
+### Why do results differ from BWA?
+
+bwa-rust **does not aim for 100% behavioral compatibility**:
+
+- Different index format (single `.fm` vs multi-file)
+- Simplified MAPQ calculation
+- Some edge case handling may differ
+
+### How to handle memory issues?
+
+Use memory protection parameters:
+
+```bash
+# Reduce repetitive seeds
+bwa-rust align -i ref.fm reads.fq --max-occ 100
+
+# Reduce candidate chains
+bwa-rust mem ref.fa reads.fq --max-chains 3
+
+# Reduce output count
+bwa-rust mem ref.fa reads.fq --max-alignments 3
+```
+
+### How to improve performance?
+
+1. **Increase threads**: `-t 8`
+2. **Adjust bandwidth**: smaller is faster but less sensitive to indels
+3. **Raise threshold**: fewer secondary alignments
