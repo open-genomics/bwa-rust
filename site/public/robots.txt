@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://lessup.github.io/bwa-rust/sitemap.xml
