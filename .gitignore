@@ -42,7 +42,6 @@ tarpaulin-report.html
 node_modules/
 site/.vitepress/dist/
 site/.vitepress/cache/
-package-lock.json
 
 # Environment
 .env
