@@ -1,6 +1,6 @@
 [package]
 name = "bwa-rust"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 authors = ["LessUp"]
 description = "A BWA-inspired sequence aligner implemented in Rust, featuring FM-index, SMEM seeding, and banded Smith-Waterman alignment"

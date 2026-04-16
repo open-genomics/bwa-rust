@@ -9,6 +9,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-04-16
+
+### 🌏 Documentation
+
+#### Bilingual Documentation Suite
+
+- **Complete documentation overhaul** with full Chinese (中文) and English support
+- **Architecture Documentation**:
+  - [Architecture Overview](docs/architecture/overview.md) / [中文](docs/architecture/overview.zh-CN.md)
+  - [Index Building](docs/architecture/index-building.md) / [中文](docs/architecture/index-building.zh-CN.md)
+  - [Alignment Algorithms](docs/architecture/alignment.md) / [中文](docs/architecture/alignment.zh-CN.md)
+- **Tutorial Documentation**:
+  - [Getting Started](docs/tutorial/getting-started.md) / [中文](docs/tutorial/getting-started.zh-CN.md)
+  - [Algorithm Tutorial](docs/tutorial/algorithms.md) / [中文](docs/tutorial/algorithms.zh-CN.md)
+- **API Documentation**:
+  - [Library Usage](docs/api/library-usage.md) / [中文](docs/api/library-usage.zh-CN.md)
+- [Documentation Index](docs/README.md) with cross-language navigation
+
 ### ✨ Added
 
 #### Memory Protection Configuration
@@ -93,7 +111,7 @@ New configurable limits to prevent memory explosion on repetitive sequences:
 | Bidirectional | Forward and reverse-complement alignment |
 | Candidate Management | Multi-chain deduplication, primary/secondary output |
 | MAPQ Estimation | Based on primary/secondary score difference |
-| SAM Output | Full header, CIGAR, AS/XS/NM tags |
+| SAM Output | Full header, CIGAR, MAPQ, AS/XS/NM tags |
 | Multi-threading | Parallel processing via rayon (`--threads`) |
 
 #### One-Step Alignment (`mem` subcommand)
@@ -114,14 +132,14 @@ New configurable limits to prevent memory explosion on repetitive sequences:
 
 | Version | Date | Highlights |
 |---------|------|------------|
-| Unreleased | — | Memory protection, alignment quality fixes, code quality improvements |
-| 0.1.0 | 2026-02-13 | Initial release: FM index, SMEM seeding, banded SW, SAM output, multi-threading |
+| [0.2.0] | 2026-04-16 | Bilingual documentation, alignment quality improvements, memory protection |
+| [0.1.0] | 2026-02-13 | Initial release: FM index, SMEM seeding, banded SW, SAM output, multi-threading |
 
 ---
 
 ## Migration Guide
 
-### From v0.1.0 to Unreleased
+### From v0.1.0 to v0.2.0
 
 **No breaking changes**. All new features are backward compatible:
 
@@ -129,7 +147,7 @@ New configurable limits to prevent memory explosion on repetitive sequences:
 - Existing CLI commands work unchanged
 - `.fm` index format unchanged (version 2)
 
-### New CLI Options (Unreleased)
+### New CLI Options (v0.2.0)
 
 ```bash
 # Limit repetitive seeds (default: 500)
@@ -153,4 +171,11 @@ Before each release, ensure:
 - [ ] `cargo test --all-targets --all-features` passes
 - [ ] `cargo build --release` succeeds
 - [ ] CHANGELOG.md updated with release date
+- [ ] Version bumped in Cargo.toml
 - [ ] Git tag created: `v{version}`
+
+---
+
+[unreleased]: https://github.com/LessUp/bwa-rust/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/LessUp/bwa-rust/compare/v0.1.0...v0.2.0
+[0.1.0]: https://github.com/LessUp/bwa-rust/releases/tag/v0.1.0
