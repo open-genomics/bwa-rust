@@ -10,6 +10,21 @@ pub struct FastqRecord {
     pub qual: Vec<u8>,
 }
 
+/// A pair of reads from paired-end sequencing.
+#[derive(Debug, Clone)]
+pub struct ReadPair {
+    /// Read name (same for both reads, without /1 or /2 suffix)
+    pub name: String,
+    /// First read sequence
+    pub seq1: Vec<u8>,
+    /// First read quality
+    pub qual1: Vec<u8>,
+    /// Second read sequence
+    pub seq2: Vec<u8>,
+    /// Second read quality
+    pub qual2: Vec<u8>,
+}
+
 pub struct FastqReader<R: BufRead> {
     reader: R,
     buf: String,
@@ -74,6 +89,115 @@ impl<R: BufRead> FastqReader<R> {
         }
 
         Ok(Some(FastqRecord { id, desc, seq, qual }))
+    }
+}
+
+/// Reader for paired-end FASTQ files.
+/// Supports both separate files and interleaved format.
+pub struct PairedFastqReader<R1: BufRead, R2: BufRead> {
+    reader1: FastqReader<R1>,
+    reader2: Option<FastqReader<R2>>,
+    #[allow(dead_code)]
+    buf: String,
+    done: bool,
+}
+
+impl<R1: BufRead, R2: BufRead> PairedFastqReader<R1, R2> {
+    /// Create a reader for two separate FASTQ files.
+    pub fn new_separate(reader1: R1, reader2: R2) -> Self {
+        Self {
+            reader1: FastqReader::new(reader1),
+            reader2: Some(FastqReader::new(reader2)),
+            buf: String::new(),
+            done: false,
+        }
+    }
+
+    /// Create a reader for interleaved FASTQ (reads alternate R1, R2).
+    pub fn new_interleaved(reader: R1) -> Self {
+        Self {
+            reader1: FastqReader::new(reader),
+            reader2: None,
+            buf: String::new(),
+            done: false,
+        }
+    }
+
+    /// Read the next pair of reads.
+    pub fn next_pair(&mut self) -> Result<Option<ReadPair>> {
+        if self.done {
+            return Ok(None);
+        }
+
+        if let Some(ref mut reader2) = self.reader2 {
+            // Separate files mode
+            let rec1 = self.reader1.next_record()?;
+            let rec2 = reader2.next_record()?;
+
+            match (rec1, rec2) {
+                (Some(r1), Some(r2)) => {
+                    // Remove /1 /2 suffixes if present and ensure names match
+                    let name1 = strip_read_suffix(&r1.id);
+                    let name2 = strip_read_suffix(&r2.id);
+
+                    if name1 != name2 {
+                        return Err(anyhow!("read name mismatch: '{}' vs '{}'", name1, name2));
+                    }
+
+                    Ok(Some(ReadPair {
+                        name: name1,
+                        seq1: r1.seq,
+                        qual1: r1.qual,
+                        seq2: r2.seq,
+                        qual2: r2.qual,
+                    }))
+                }
+                (None, None) => {
+                    self.done = true;
+                    Ok(None)
+                }
+                (Some(_), None) => Err(anyhow!("R1 file has more reads than R2")),
+                (None, Some(_)) => Err(anyhow!("R2 file has more reads than R1")),
+            }
+        } else {
+            // Interleaved mode
+            let rec1 = self.reader1.next_record()?;
+            if rec1.is_none() {
+                self.done = true;
+                return Ok(None);
+            }
+            let r1 = rec1.unwrap();
+
+            let rec2 = self.reader1.next_record()?;
+            if rec2.is_none() {
+                return Err(anyhow!("interleaved FASTQ has odd number of reads"));
+            }
+            let r2 = rec2.unwrap();
+
+            let name1 = strip_read_suffix(&r1.id);
+            let name2 = strip_read_suffix(&r2.id);
+
+            if name1 != name2 {
+                return Err(anyhow!("interleaved read name mismatch: '{}' vs '{}'", name1, name2));
+            }
+
+            Ok(Some(ReadPair {
+                name: name1,
+                seq1: r1.seq,
+                qual1: r1.qual,
+                seq2: r2.seq,
+                qual2: r2.qual,
+            }))
+        }
+    }
+}
+
+/// Strip /1 or /2 suffix from read name.
+fn strip_read_suffix(name: &str) -> String {
+    if name.ends_with("/1") || name.ends_with("/2") {
+        name[..name.len() - 2].to_string()
+    } else {
+        name.to_string()
     }
 }
 

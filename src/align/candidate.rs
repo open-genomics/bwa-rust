@@ -21,6 +21,14 @@ pub struct AlignCandidate {
     pub cigar: String,
     pub nm: u32,
     pub contig_idx: usize,
+    /// Reference sequence segment for MD:Z tag generation (oriented to match query strand)
+    pub ref_seq: Vec<u8>,
+    /// Query sequence segment (oriented to match the alignment strand)
+    pub query_seq: Vec<u8>,
+    /// Start position on the original query (0-based, forward strand)
+    pub query_start: usize,
+    /// End position on the original query (0-based, exclusive, forward strand)
+    pub query_end: usize,
 }
 
 /// 从 FM 索引查找种子、构建链并执行 SW 对齐，将所有候选结果追加到 `candidates`。
@@ -28,6 +36,7 @@ pub struct AlignCandidate {
 /// - `query_norm`：归一化（大写 ACGTN）的 query 字节序列
 /// - `query_alpha`：对应的字母表编码序列（`dna::to_alphabet`）
 /// - `is_rev`：该 query 是否为反向互补链
+/// - `original_query_len`：原始 query 长度（用于坐标转换）
 /// - `opt`：比对参数（含 `min_seed_len`、`clip_penalty`、`max_occ` 等）
 pub fn collect_candidates(
     fm: &FMIndex,
@@ -35,6 +44,7 @@ pub fn collect_candidates(
     query_alpha: &[u8],
     sw_params: SwParams,
     is_rev: bool,
+    original_query_len: usize,
     opt: &AlignOpt,
     candidates: &mut Vec<AlignCandidate>,
 ) {
@@ -88,6 +98,9 @@ pub fn collect_candidates(
             &selected,
             ref_offset,
             opt.clip_penalty,
+            ref_seq.as_slice(),
+            query_norm,
+            original_query_len,
         ));
     }
 }
@@ -159,7 +172,41 @@ fn build_candidate(
     res: &ChainAlignResult,
     ref_offset: usize,
     clip_penalty: i32,
+    ref_seq: &[u8],
+    query_norm: &[u8],
+    original_query_len: usize,
 ) -> AlignCandidate {
+    // Extract the aligned reference segment for MD:Z tag generation
+    // ref_offset is the window start, res.ref_start is the offset within the window
+    let abs_ref_start = ref_offset + res.ref_start;
+    // Calculate reference length consumed by CIGAR
+    let ref_len = cigar_ref_length(&res.cigar);
+    let ref_segment = if abs_ref_start + ref_len <= ref_seq.len() {
+        ref_seq[abs_ref_start..abs_ref_start + ref_len].to_vec()
+    } else {
+        Vec::new()
+    };
+
+    // Extract the aligned query segment
+    let query_segment = if res.query_start + res.query_end <= query_norm.len() {
+        query_norm[res.query_start..res.query_end].to_vec()
+    } else {
+        Vec::new()
+    };
+
+    // Convert coordinates to original query (forward strand) coordinates
+    // If is_rev is true, query_norm is the reverse complement, so we need to map coordinates
+    let (query_start, query_end) = if is_rev {
+        // For reverse complement alignment:
+        // res.query_start/end are on the revcomp sequence
+        // Map back to original: orig_start = len - revcomp_end, orig_end = len - revcomp_start
+        let orig_start = original_query_len.saturating_sub(res.query_end);
+        let orig_end = original_query_len.saturating_sub(res.query_start);
+        (orig_start, orig_end)
+    } else {
+        (res.query_start, res.query_end)
+    };
+
     AlignCandidate {
         score: res.score,
         sort_score: effective_score(res.score, &res.cigar, clip_penalty),
@@ -169,7 +216,22 @@ fn build_candidate(
         cigar: res.cigar.clone(),
         nm: res.nm,
         contig_idx,
+        ref_seq: ref_segment,
+        query_seq: query_segment,
+        query_start,
+        query_end,
     }
+}
+
+/// Calculate the reference length consumed by a CIGAR string.
+fn cigar_ref_length(cigar: &str) -> usize {
+    sw::parse_cigar(cigar)
+        .into_iter()
+        .filter_map(|(op, len)| match op {
+            'M' | '=' | 'X' | 'D' | 'N' => Some(len),
+            _ => None,
+        })
+        .sum()
 }
 
 fn effective_score(score: i32, cigar: &str, clip_penalty: i32) -> i32 {
@@ -236,7 +298,7 @@ mod tests {
         };
         let mut candidates = Vec::new();
         let opt = default_opt();
-        collect_candidates(&fm, &norm, &alpha, sw, false, &opt, &mut candidates);
+        collect_candidates(&fm, &norm, &alpha, sw, false, norm.len(), &opt, &mut candidates);
         assert!(!candidates.is_empty());
         assert!(candidates[0].score > 0);
         assert!(candidates[0].cigar.contains('M'));
@@ -259,7 +321,7 @@ mod tests {
         };
         let mut candidates = Vec::new();
         let opt = default_opt();
-        collect_candidates(&fm, &norm, &alpha, sw, false, &opt, &mut candidates);
+        collect_candidates(&fm, &norm, &alpha, sw, false, norm.len(), &opt, &mut candidates);
         assert!(!candidates.is_empty());
         assert!(candidates[0].score > 0);
     }
@@ -276,7 +338,7 @@ mod tests {
         };
         let mut candidates = Vec::new();
         let opt = default_opt();
-        collect_candidates(&fm, &[], &[], sw, false, &opt, &mut candidates);
+        collect_candidates(&fm, &[], &[], sw, false, 0, &opt, &mut candidates);
         assert!(candidates.is_empty());
     }
 
@@ -292,6 +354,10 @@ mod tests {
                 cigar: "20M".into(),
                 nm: 0,
                 contig_idx: 0,
+                ref_seq: Vec::new(),
+                query_seq: Vec::new(),
+                query_start: 0,
+                query_end: 20,
             },
             AlignCandidate {
                 score: 40,
@@ -302,6 +368,10 @@ mod tests {
                 cigar: "20M".into(),
                 nm: 1,
                 contig_idx: 0,
+                ref_seq: Vec::new(),
+                query_seq: Vec::new(),
+                query_start: 0,
+                query_end: 20,
             },
             AlignCandidate {
                 score: 45,
@@ -312,6 +382,10 @@ mod tests {
                 cigar: "20M".into(),
                 nm: 0,
                 contig_idx: 0,
+                ref_seq: Vec::new(),
+                query_seq: Vec::new(),
+                query_start: 0,
+                query_end: 20,
             },
         ];
         dedup_candidates(&mut cands);
@@ -330,6 +404,10 @@ mod tests {
                 cigar: "20M".into(),
                 nm: 0,
                 contig_idx: 0,
+                ref_seq: Vec::new(),
+                query_seq: Vec::new(),
+                query_start: 0,
+                query_end: 20,
             },
             AlignCandidate {
                 score: 45,
@@ -340,6 +418,10 @@ mod tests {
                 cigar: "20M".into(),
                 nm: 0,
                 contig_idx: 0,
+                ref_seq: Vec::new(),
+                query_seq: Vec::new(),
+                query_start: 20,
+                query_end: 40,
             },
             AlignCandidate {
                 score: 40,
@@ -350,6 +432,10 @@ mod tests {
                 cigar: "20M".into(),
                 nm: 0,
                 contig_idx: 0,
+                ref_seq: Vec::new(),
+                query_seq: Vec::new(),
+                query_start: 0,
+                query_end: 20,
             },
         ];
         dedup_candidates(&mut cands);

@@ -59,6 +59,16 @@ enum Commands {
         band_width: usize,
         #[arg(long = "score-threshold", default_value_t = 20)]
         score_threshold: i32,
+        /// Minimum seed length
+        #[arg(short = 'k', long = "min-seed-len", default_value_t = 19)]
+        min_seed_len: usize,
+        /// Z-drop threshold for alignment extension
+        #[arg(short = 'd', long = "z-drop", default_value_t = 100)]
+        zdrop: i32,
+        /// Preset configuration (pacbio, ont2d)
+        #[arg(short = 'x', long = "preset")]
+        preset: Option<String>,
+        /// Number of threads
         #[arg(short = 't', long = "threads", value_parser = parse_threads, default_value_t = 1)]
         threads: usize,
     },
@@ -92,6 +102,15 @@ enum Commands {
         /// Minimum alignment score to output (BWA default: 30, lowered for short reads)
         #[arg(short = 'T', long = "score-threshold", default_value_t = 10)]
         score_threshold: i32,
+        /// Minimum seed length
+        #[arg(short = 'k', long = "min-seed-len", default_value_t = 19)]
+        min_seed_len: usize,
+        /// Z-drop threshold for alignment extension
+        #[arg(short = 'd', long = "z-drop", default_value_t = 100)]
+        zdrop: i32,
+        /// Preset configuration (pacbio, ont2d)
+        #[arg(short = 'x', long = "preset")]
+        preset: Option<String>,
         /// Number of threads
         #[arg(short = 't', long = "threads", value_parser = parse_threads, default_value_t = 1)]
         threads: usize,
@@ -106,6 +125,28 @@ fn parse_threads(s: &str) -> std::result::Result<usize, String> {
     Ok(threads)
 }
 
+/// Apply preset configuration to alignment options
+fn apply_preset(opt: &mut align::AlignOpt, preset: &str) {
+    match preset {
+        "pacbio" | "pacbio-hifi" => {
+            opt.min_seed_len = 17;
+            opt.band_width = 200;
+            opt.score_threshold = 10;
+        }
+        "ont2d" | "ont" => {
+            opt.min_seed_len = 14;
+            opt.band_width = 100;
+            opt.score_threshold = 10;
+        }
+        _ => {
+            eprintln!(
+                "[bwa-rust] Warning: unknown preset '{}', using default parameters",
+                preset
+            );
+        }
+    }
+}
+
 fn build_align_opt(
     match_score: i32,
     mismatch_penalty: i32,
@@ -114,9 +155,12 @@ fn build_align_opt(
     clip_penalty: i32,
     band_width: usize,
     score_threshold: i32,
+    min_seed_len: usize,
+    zdrop: i32,
     threads: usize,
+    preset: Option<&str>,
 ) -> align::AlignOpt {
-    let opt = align::AlignOpt {
+    let mut opt = align::AlignOpt {
         match_score,
         mismatch_penalty,
         gap_open,
@@ -124,10 +168,16 @@ fn build_align_opt(
         clip_penalty,
         band_width,
         score_threshold,
-        min_seed_len: 19,
+        min_seed_len,
         threads,
+        zdrop,
         ..align::AlignOpt::default()
     };
+
+    if let Some(p) = preset {
+        apply_preset(&mut opt, p);
+    }
+
     if let Err(e) = opt.validate() {
         eprintln!("Error: invalid alignment parameters: {}", e);
         std::process::exit(1);
@@ -150,6 +200,9 @@ fn main() -> Result<()> {
             clip_penalty,
             band_width,
             score_threshold,
+            min_seed_len,
+            zdrop,
+            preset,
             threads,
         } => {
             let opt = build_align_opt(
@@ -160,7 +213,10 @@ fn main() -> Result<()> {
                 clip_penalty,
                 band_width,
                 score_threshold,
+                min_seed_len,
+                zdrop,
                 threads,
+                preset.as_deref(),
             );
             run_align(&index, &reads, out.as_deref(), opt)
         }
@@ -175,6 +231,9 @@ fn main() -> Result<()> {
             clip_penalty,
             band_width,
             score_threshold,
+            min_seed_len,
+            zdrop,
+            preset,
             threads,
         } => {
             let opt = build_align_opt(
@@ -185,7 +244,10 @@ fn main() -> Result<()> {
                 clip_penalty,
                 band_width,
                 score_threshold,
+                min_seed_len,
+                zdrop,
                 threads,
+                preset.as_deref(),
             );
             run_mem(&reference, &reads, out.as_deref(), opt)
         }

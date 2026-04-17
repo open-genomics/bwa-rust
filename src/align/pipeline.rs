@@ -11,6 +11,7 @@ use crate::util::dna;
 
 use super::candidate::{collect_candidates, dedup_candidates, AlignCandidate};
 use super::mapq::compute_mapq;
+use super::supplementary::{classify_alignments, generate_sa_tag, AlignmentType};
 use super::AlignOpt;
 use super::SwParams;
 
@@ -103,12 +104,13 @@ pub(crate) fn align_single_read(fm: &FMIndex, rec: &FastqRecord, sw_params: SwPa
     let seq = &rec.seq;
     let qual = &rec.qual;
 
-    // DNA/QUAL 序列均为有效 ASCII（解析时已验证），直接转换无需 lossy 路径
-    let seq_fwd = String::from_utf8(seq.to_vec()).expect("FASTQ sequence must be valid UTF-8/ASCII");
-    let qual_fwd = String::from_utf8(qual.to_vec()).expect("FASTQ quality must be valid UTF-8/ASCII");
+    // DNA/QUAL 序列均为有效 ASCII（解析时已验证），直接转换
+    // 使用 unwrap 是安全的，因为 FASTQ 解析器已确保序列是有效的 ASCII/UTF-8
+    let seq_fwd = std::str::from_utf8(seq).unwrap_or_else(|_| panic!("FASTQ sequence contains invalid UTF-8"));
+    let qual_fwd = std::str::from_utf8(qual).unwrap_or_else(|_| panic!("FASTQ quality contains invalid UTF-8"));
 
     if seq.is_empty() {
-        return vec![sam::format_unmapped(qname, &seq_fwd, &qual_fwd)];
+        return vec![sam::format_unmapped(qname, seq_fwd, qual_fwd)];
     }
 
     // 正向
@@ -121,13 +123,33 @@ pub(crate) fn align_single_read(fm: &FMIndex, rec: &FastqRecord, sw_params: SwPa
 
     let mut all_candidates: Vec<AlignCandidate> = Vec::new();
 
+    let query_len = seq.len();
+
     // 正向对齐候选
-    collect_candidates(fm, &fwd_norm, &fwd_alpha, sw_params, false, opt, &mut all_candidates);
+    collect_candidates(
+        fm,
+        &fwd_norm,
+        &fwd_alpha,
+        sw_params,
+        false,
+        query_len,
+        opt,
+        &mut all_candidates,
+    );
     // 反向互补对齐候选
-    collect_candidates(fm, &rev_norm, &rev_alpha, sw_params, true, opt, &mut all_candidates);
+    collect_candidates(
+        fm,
+        &rev_norm,
+        &rev_alpha,
+        sw_params,
+        true,
+        query_len,
+        opt,
+        &mut all_candidates,
+    );
 
     if all_candidates.is_empty() {
-        return vec![sam::format_unmapped(qname, &seq_fwd, &qual_fwd)];
+        return vec![sam::format_unmapped(qname, seq_fwd, qual_fwd)];
     }
 
     // 按得分降序排列
@@ -146,7 +168,7 @@ pub(crate) fn align_single_read(fm: &FMIndex, rec: &FastqRecord, sw_params: SwPa
     dedup_candidates(&mut all_candidates);
 
     if all_candidates.is_empty() || all_candidates[0].sort_score < opt.score_threshold {
-        return vec![sam::format_unmapped(qname, &seq_fwd, &qual_fwd)];
+        return vec![sam::format_unmapped(qname, seq_fwd, qual_fwd)];
     }
 
     let max_aln = opt.max_alignments_per_read;
@@ -157,9 +179,10 @@ pub(crate) fn align_single_read(fm: &FMIndex, rec: &FastqRecord, sw_params: SwPa
         .take(max_aln)
         .any(|cand| cand.sort_score >= opt.score_threshold && cand.is_rev);
     let (seq_rev, qual_rev) = if needs_rev_output {
-        let s = String::from_utf8(rc_seq.clone()).expect("reverse-complement sequence must be valid UTF-8/ASCII");
+        let s = std::str::from_utf8(&rc_seq)
+            .unwrap_or_else(|_| panic!("reverse-complement sequence contains invalid UTF-8"));
         let q: String = qual.iter().rev().map(|&b| b as char).collect();
-        (s, q)
+        (s.to_string(), q)
     } else {
         (String::new(), String::new())
     };
@@ -177,6 +200,9 @@ pub(crate) fn align_single_read(fm: &FMIndex, rec: &FastqRecord, sw_params: SwPa
         0
     };
 
+    // Classify alignments into primary, secondary, and supplementary
+    let classification = classify_alignments(&all_candidates);
+
     for (idx, cand) in all_candidates.iter().enumerate() {
         if cand.sort_score < opt.score_threshold {
             break;
@@ -187,10 +213,17 @@ pub(crate) fn align_single_read(fm: &FMIndex, rec: &FastqRecord, sw_params: SwPa
             flag |= 0x10; // reverse complement
         }
 
-        if idx == 0 {
-            // 主比对
-        } else {
-            flag |= 0x100; // secondary
+        // Determine alignment type and set flag accordingly
+        let align_type = classification
+            .iter()
+            .find(|(i, _)| *i == idx)
+            .map(|(_, t)| *t)
+            .unwrap_or(AlignmentType::Secondary);
+
+        match align_type {
+            AlignmentType::Primary => {}
+            AlignmentType::Secondary => flag |= 0x100,
+            AlignmentType::Supplementary => flag |= 0x800,
         }
 
         let mapq = if idx == 0 {
@@ -207,24 +240,53 @@ pub(crate) fn align_single_read(fm: &FMIndex, rec: &FastqRecord, sw_params: SwPa
 
         // SAM 规范：FLAG 含 0x10 时，SEQ 为原始 read 的反向互补，QUAL 反转
         let (out_seq, out_qual) = if cand.is_rev {
-            (&seq_rev, &qual_rev)
+            (seq_rev.as_str(), qual_rev.as_str())
         } else {
-            (&seq_fwd, &qual_fwd)
+            (seq_fwd, qual_fwd)
         };
 
-        sam_lines.push(sam::format_record(
-            qname,
-            flag,
-            &cand.rname,
-            cand.pos1,
-            mapq,
-            &cand.cigar,
-            out_seq,
-            out_qual,
-            cand.score,
-            sub_score,
-            cand.nm,
-        ));
+        // Generate MD:Z tag
+        let md_tag = if !cand.ref_seq.is_empty() && !cand.query_seq.is_empty() {
+            sam::generate_md_tag(&cand.ref_seq, &cand.query_seq, &cand.cigar)
+        } else {
+            String::new()
+        };
+
+        // Generate SA:Z tag for supplementary alignments
+        let sa_tag = generate_sa_tag(idx, &all_candidates, &classification);
+
+        let sam_line = if md_tag.is_empty() {
+            sam::format_record(
+                qname,
+                flag,
+                &cand.rname,
+                cand.pos1,
+                mapq,
+                &cand.cigar,
+                out_seq,
+                out_qual,
+                cand.score,
+                sub_score,
+                cand.nm,
+            )
+        } else {
+            sam::format_record_with_md_sa(
+                qname,
+                flag,
+                &cand.rname,
+                cand.pos1,
+                mapq,
+                &cand.cigar,
+                out_seq,
+                out_qual,
+                cand.score,
+                sub_score,
+                cand.nm,
+                &md_tag,
+                &sa_tag,
+            )
+        };
+        sam_lines.push(sam_line);
 
         // 限制输出的比对数量
         if idx + 1 >= max_aln {
