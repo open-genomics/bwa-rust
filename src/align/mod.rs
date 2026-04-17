@@ -4,6 +4,7 @@ pub mod extend;
 pub mod mapq;
 pub mod pipeline;
 pub mod seed;
+pub mod supplementary;
 pub mod sw;
 
 pub use candidate::{collect_candidates, dedup_candidates, AlignCandidate};
@@ -12,6 +13,7 @@ pub use extend::{chain_to_alignment, chain_to_alignment_buf, ChainAlignResult};
 pub use mapq::compute_mapq;
 pub use pipeline::{align_fastq_with_fm_opt, align_fastq_with_opt};
 pub use seed::{find_mem_seeds, find_smem_seeds, find_smem_seeds_with_max_occ, AlnReg, MemSeed};
+pub use supplementary::{are_non_overlapping, classify_alignments, generate_sa_tag, AlignmentType};
 pub use sw::{banded_sw, SwParams, SwResult};
 
 /// Re-export DEFAULT_MAX_OCC from seed module
@@ -22,6 +24,39 @@ pub use chain::DEFAULT_MAX_CHAINS_PER_CONTIG;
 
 /// Default maximum alignments output per read
 pub const DEFAULT_MAX_ALIGNMENTS_PER_READ: usize = 5;
+
+/// Default Z-drop threshold for alignment extension
+pub const DEFAULT_ZDROP: i32 = 100;
+
+/// Default maximum insert size for paired-end alignment
+pub const DEFAULT_MAX_INSERT: usize = 500;
+
+/// Default minimum insert size for paired-end alignment
+pub const DEFAULT_MIN_INSERT: usize = 0;
+
+/// Options for paired-end alignment.
+#[derive(Clone, Copy, Debug)]
+pub struct PairingOpt {
+    /// Minimum insert size (distance between read pairs)
+    pub min_insert: usize,
+    /// Maximum insert size
+    pub max_insert: usize,
+    /// Enable mate rescue for unmapped mates
+    pub mate_rescue: bool,
+    /// Penalty for unpaired alignments
+    pub pen_unpaired: i32,
+}
+
+impl Default for PairingOpt {
+    fn default() -> Self {
+        Self {
+            min_insert: DEFAULT_MIN_INSERT,
+            max_insert: DEFAULT_MAX_INSERT,
+            mate_rescue: true,
+            pen_unpaired: 17,
+        }
+    }
+}
 
 #[derive(Clone, Copy, Debug)]
 pub struct AlignOpt {
@@ -40,6 +75,8 @@ pub struct AlignOpt {
     pub max_alignments_per_read: usize,
     /// Maximum occurrences for a MEM seed (skip highly repetitive seeds)
     pub max_occ: usize,
+    /// Z-drop threshold for alignment extension termination
+    pub zdrop: i32,
 }
 
 impl Default for AlignOpt {
@@ -57,6 +94,7 @@ impl Default for AlignOpt {
             max_chains_per_contig: DEFAULT_MAX_CHAINS_PER_CONTIG,
             max_alignments_per_read: DEFAULT_MAX_ALIGNMENTS_PER_READ,
             max_occ: DEFAULT_MAX_OCC,
+            zdrop: DEFAULT_ZDROP,
         }
     }
 }

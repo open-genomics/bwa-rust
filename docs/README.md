@@ -8,41 +8,47 @@
 
 | Document | Description | 中文 |
 |----------|-------------|------|
+| [Specifications](../specs/) | **Single Source of Truth** (SDD) | [规范](../specs/README.md) |
 | [Getting Started](tutorial/getting-started.md) | Installation and basic usage | [快速入门](tutorial/getting-started.zh-CN.md) |
 | [Architecture](architecture/) | Module design and implementation | [架构](architecture/overview.zh-CN.md) |
 | [Algorithms](tutorial/algorithms.md) | Core algorithm tutorial | [算法教程](tutorial/algorithms.zh-CN.md) |
 | [API Reference](api/) | Library API documentation | [API 文档](api/library-usage.zh-CN.md) |
+| [Development](development/) | Development guide | - |
 
 ---
 
 ## 📂 Documentation Structure
 
-### Tutorial (教程)
-
-| Document | EN | ZH-CN |
-|----------|:--:|:-----:|
-| Getting Started | [📄](tutorial/getting-started.md) | [📄](tutorial/getting-started.zh-CN.md) |
-| Algorithms | [📄](tutorial/algorithms.md) | [📄](tutorial/algorithms.zh-CN.md) |
-
-### Architecture (架构)
-
-| Document | EN | ZH-CN |
-|----------|:--:|:-----:|
-| Overview | [📄](architecture/overview.md) | [📄](architecture/overview.zh-CN.md) |
-| Index Building | [📄](architecture/index-building.md) | [📄](architecture/index-building.zh-CN.md) |
-| Alignment | [📄](architecture/alignment.md) | [📄](architecture/alignment.zh-CN.md) |
-
-### API (应用程序接口)
-
-| Document | EN | ZH-CN |
-|----------|:--:|:-----:|
-| Library Usage | [📄](api/library-usage.md) | [📄](api/library-usage.zh-CN.md) |
-
-### Development (开发)
-
-| Document | EN |
-|----------|:--:|
-| Development Guide | [📄](development/README.md) |
+```
+docs/
+├── README.md              # This index
+├── assets/                # Images, diagrams, UML
+│
+├── tutorial/              # User tutorials
+│   ├── README.md
+│   ├── getting-started.md
+│   ├── getting-started.zh-CN.md
+│   ├── algorithms.md
+│   └── algorithms.zh-CN.md
+│
+├── architecture/          # Architecture documentation
+│   ├── README.md
+│   ├── overview.md
+│   ├── overview.zh-CN.md
+│   ├── index-building.md
+│   ├── index-building.zh-CN.md
+│   ├── alignment.md
+│   └── alignment.zh-CN.md
+│
+├── api/                   # API documentation
+│   ├── README.md
+│   ├── library-usage.md
+│   └── library-usage.zh-CN.md
+│
+└── development/           # Development guides
+    ├── README.md
+    └── bwa-full-reimplementation-plan.md
+```
 
 ---
 
@@ -91,8 +97,10 @@ bwa-rust is a BWA-MEM style short-read DNA sequence aligner written in Rust.
 
 ## 🌍 Language Support
 
-- **English** — Default documentation
-- **中文 (Chinese)** — 完整中文文档
+| Language | Status |
+|----------|--------|
+| **English** | Default documentation |
+| **中文 (Chinese)** | Complete translation |
 
 Each document is available in both languages where indicated.
 

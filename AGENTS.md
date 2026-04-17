@@ -1,28 +1,109 @@
 # AGENTS.md
 
-> 编码代理（Coding Agents）仓库指南
+> AI 编程助手（Claude Code, Cursor, Windsurf, etc.）项目指南
+
+---
+
+## Project Philosophy: Spec-Driven Development (SDD)
+
+本项目严格遵循**规范驱动开发（Spec-Driven Development）**范式。所有的代码实现必须以 `/specs` 目录下的规范文档为唯一事实来源（Single Source of Truth）。
+
+---
+
+## Directory Context (目录说明)
+
+```
+specs/                    # 核心：规范文档存放地
+├── product/              # 产品功能定义与验收标准 (PRD)
+├── rfc/                  # 技术设计文档与架构方案 (RFCs)
+├── api/                  # 接口规范 (CLI、库 API)
+└── testing/              # 测试策略与 BDD 测试用例规范
+
+docs/                     # 用户文档与开发文档
+├── architecture/         # 架构说明
+├── tutorial/             # 用户教程
+├── api/                  # API 使用指南
+├── development/          # 开发指南
+└── assets/               # 图片、UML 图等静态资源
+```
+
+| 目录 | 说明 |
+|------|------|
+| `/specs/product/` | 产品功能定义与验收标准 |
+| `/specs/rfc/` | 技术设计文档 (RFCs)、架构方案 |
+| `/specs/api/` | API 接口定义（CLI interface、library API） |
+| `/specs/testing/` | BDD 测试用例规范与测试策略 |
+
+---
+
+## AI Agent Workflow Instructions (AI 工作流指令)
+
+当你（AI）被要求开发一个新功能、修改现有功能或修复 Bug 时，**必须严格按照以下工作流执行，不可跳过任何步骤**：
+
+### Step 1: 审查与分析 (Review Specs)
+
+- 在编写任何代码之前，首先阅读 `/specs` 目录下相关的产品文档、RFC 和 API 定义。
+- 如果用户指令与现有 Spec 冲突，**请立即停止编码**，并指出冲突点，询问用户是否需要先更新 Spec。
+
+### Step 2: 规范优先 (Spec-First Update)
+
+- 如果这是一个新功能，或者需要改变现有的接口/行为，**必须首先提议修改或创建相应的 Spec 文档**（如 RFC 或 API 文档）。
+- 等待用户确认 Spec 的修改后，才能进入代码编写阶段。
+
+### Step 3: 代码实现 (Implementation)
+
+- 编写代码时，必须 100% 遵守 Spec 中的定义（包括变量命名、API 路径、数据类型、行为规范等）。
+- 不要在代码中擅自添加 Spec 中未定义的功能（No Gold-Plating）。
+
+### Step 4: 测试验证 (Test against Spec)
+
+- 根据 `/specs` 中的验收标准（Acceptance Criteria）编写单元测试和集成测试。
+- 确保测试用例覆盖了 Spec 中描述的所有边界情况。
+
+---
+
+## Code Generation Rules
+
+- 任何对外部暴露的 API 变更，必须同步修改 `/specs/api/` 下的相关文档。
+- 如果遇到不确定的技术细节，请查阅 `/specs/rfc/` 下的架构约定，不要自行捏造设计模式。
+- 修改索引格式或序列化协议时，必须递增版本号并保持向后兼容。
+
+---
 
 ## 项目范围
 
-bwa-rust 是一个 BWA-MEM 风格的 DNA 短序列比对器的 Rust 实现。
+**bwa-rust** 是一个 BWA-MEM 风格的 DNA 短序列比对器的 Rust 实现。
 
-**核心流水线**：FASTA/FASTQ I/O → FM 索引 → 种子查找 → 链构建 → SW 扩展 → SAM 输出
+**核心流水线**：
+
+```
+FASTA/FASTQ → FM 索引构建 → SMEM 种子 → 种子链 → SW 对齐 → SAM 输出
+```
 
 **开发原则**：
+
 - 正确性和可重复性优先于巧妙的重构
 - 偏好小范围、符合现有模式的本地修改
 - 保持格式化、lint 和测试全部通过
 
 ---
 
-## 工具链与 CI
+## 工具链与版本
 
-### 版本要求
+| 工具 | 版本要求 |
+|------|----------|
+| Rust | MSRV 1.70 |
+| Cargo | 随 Rust 安装 |
+| clap | 4.5 (CLI) |
+| serde + bincode | 序列化 |
+| rayon | 并行处理 |
+| criterion | 基准测试 |
 
-- Rust MSRV: `1.70`（见 `Cargo.toml`）
-- 支持 Linux、macOS、Windows
+**支持平台**：Linux、macOS、Windows
 
-### CI 流程（按顺序）
+---
+
+## CI 流程
 
 ```bash
 cargo fmt --all -- --check
@@ -31,7 +112,7 @@ cargo test --all-targets --all-features
 cargo build --release
 ```
 
-> ⚠️ 修改代码后，确保上述流程全部通过
+> ⚠️ 修改代码后，确保上述流程全部通过。
 
 ---
 
@@ -50,29 +131,8 @@ cargo build --release          # Release 构建
 cargo test                     # 运行所有测试
 cargo test --lib               # 仅库测试
 cargo test --test integration  # 仅集成测试
-cargo test --all-targets --all-features  # 完整测试
-```
-
-### 单测试运行
-
-```bash
-# 按子串匹配
-cargo test error_display
-
-# 精确匹配
-cargo test error_display -- --exact
-
-# 库测试精确匹配
-cargo test --lib error_display -- --exact
-
-# 集成测试精确匹配
-cargo test --test integration e2e_build_index_and_exact_search -- --exact
-
-# 显示输出
-cargo test align_single_read_unmapped -- --exact --nocapture
-
-# 列出所有测试
-cargo test -- --list
+cargo test <test_name>         # 运行单个测试
+cargo test <test_name> -- --nocapture  # 显示输出
 ```
 
 ### 代码质量
@@ -80,7 +140,7 @@ cargo test -- --list
 ```bash
 cargo fmt --all -- --check     # 检查格式
 cargo fmt --all                # 应用格式
-cargo clippy --all-targets --all-features -- -D warnings  # Lint（与 CI 一致）
+cargo clippy --all-targets --all-features -- -D warnings  # Lint
 ```
 
 ### 基准测试
@@ -100,6 +160,9 @@ cargo run -- align -i <prefix>.fm <reads.fq>
 
 # 一步 BWA-MEM 风格运行
 cargo run -- mem <ref.fa> <reads.fq>
+
+# 多线程输出到文件
+cargo run -- mem <ref.fa> <reads.fq> -t 4 -o out.sam
 
 # 运行示例
 cargo run --example simple_align
@@ -122,6 +185,7 @@ src/
 │   └── builder.rs   # 索引构建入口
 │
 ├── align/           # 比对算法
+│   ├── mod.rs       # AlignOpt 配置、常量定义
 │   ├── seed.rs      # SMEM 种子查找
 │   ├── chain.rs     # 种子链构建与过滤
 │   ├── sw.rs        # 带状 Smith-Waterman
@@ -297,10 +361,38 @@ cargo bench  # 使用 Criterion 基准测试
 
 ---
 
+## 领域知识
+
+- **字母表编码**: `{0:$, 1:A, 2:C, 3:G, 4:T, 5:N}`, SIGMA=6
+- **FM 索引格式**: 单一 `.fm` 文件 (bincode 序列化, magic=0x424D_4146_4D5F5253)
+- **对齐流程**: FASTQ → 正向+反向互补 → SMEM 种子 → 链构建 → SW 扩展 → 候选去重 → SAM 输出
+- **默认参数 (BWA-MEM 风格)**: match=1, mismatch=4, gap_open=6, gap_ext=1, band_width=100, min_seed_len=19
+
+---
+
+## 提交规范
+
+遵循 [Conventional Commits](https://www.conventionalcommits.org/)：
+
+- `feat:` 新功能
+- `fix:` Bug 修复
+- `docs:` 文档变更
+- `refactor:` 代码重构
+- `test:` 测试相关
+- `perf:` 性能优化
+- `ci:` CI 配置变更
+
+---
+
 ## 模块速查表
 
-| 功能 | 文件 |
-|------|------|
+| 功能 | 文件/目录 |
+|------|----------|
+| **规范文档** | `specs/` |
+| 产品功能定义 | `specs/product/` |
+| 技术设计 (RFC) | `specs/rfc/` |
+| API 接口定义 | `specs/api/` |
+| 测试规范 | `specs/testing/` |
 | FM 索引核心 | `src/index/fm.rs` |
 | 索引构建 | `src/index/builder.rs`, `sa.rs`, `bwt.rs` |
 | 种子查找 | `src/align/seed.rs` |
@@ -325,8 +417,10 @@ cargo bench  # 使用 Criterion 基准测试
 
 ---
 
-## 格式兼容性
+## 不要做的事
 
-- 保持序列化/索引格式兼容，除非明确要升级
-- 修改文件格式假设时更新相关测试
-- 修改算法排名/得分时，同时审查 MAPQ、裁剪、次要比对行为
+- 不要使用 unsafe 代码
+- 不要在热路径上使用 `String` / `format!` 进行不必要的分配
+- 不要修改 `.fm` 文件的 magic number 或破坏索引格式兼容性
+- 不要在 library 层 (lib.rs) 使用 `println!`，应使用 `eprintln!` 或返回错误
+- 不要删除或弱化现有测试

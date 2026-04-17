@@ -67,6 +67,7 @@ bwa-rust mem ref.fa reads.fq -t 4 -o output.sam
 
 | 资源 | 说明 |
 |------|------|
+| [规范文档](specs/) | **唯一事实来源** (SDD 工作流) |
 | [快速入门](docs/tutorial/getting-started.zh-CN.md) | 安装和基本使用指南 |
 | [架构设计](docs/architecture/) | 模块设计和实现细节 |
 | [算法教程](docs/tutorial/algorithms.zh-CN.md) | 核心算法详解 |

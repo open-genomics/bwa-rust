@@ -67,6 +67,7 @@ bwa-rust mem ref.fa reads.fq -t 4 -o output.sam
 
 | Resource | Description |
 |----------|-------------|
+| [Specifications](specs/) | **Single Source of Truth** (SDD workflow) |
 | [Getting Started](docs/tutorial/getting-started.md) | Installation and basic usage guide |
 | [Architecture](docs/architecture/) | Module design and implementation details |
 | [Algorithms](docs/tutorial/algorithms.md) | Core algorithm tutorial |

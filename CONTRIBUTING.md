@@ -4,6 +4,31 @@
 
 ---
 
+## 规范驱动开发 (SDD)
+
+本项目严格遵循**规范驱动开发（Spec-Driven Development）**范式。
+
+- **`/specs/product/`**: 产品功能定义与验收标准
+- **`/specs/rfc/`**: 技术设计文档与架构方案
+- **`/specs/api/`**: API 接口规范
+- **`/specs/testing/`**: BDD 测试用例规范
+
+**工作流要求**：
+1. 新功能开发必须先更新 Spec 文档
+2. 代码实现必须 100% 遵守 Spec 定义
+3. 测试用例需覆盖 Spec 中的验收标准
+
+### 如何参与编写 Spec
+
+1. **新功能**：在 `specs/product/` 创建或更新功能规范，定义验收标准
+2. **技术设计**：在 `specs/rfc/` 创建 RFC 文档，编号遵循 `NNNN-title.md` 格式
+3. **API 变更**：在 `specs/api/` 更新接口规范
+4. **测试规范**：在 `specs/testing/` 定义测试策略
+
+详见 [AGENTS.md](AGENTS.md) 中的 AI 工作流指令。
+
+---
+
 ## 快速开始
 
 ```bash
@@ -137,35 +162,28 @@ cargo bench
 
 ```
 bwa-rust/
+├── specs/               # 规范文档 (Single Source of Truth)
+│   ├── product/         # 产品功能定义
+│   ├── rfc/             # 技术设计 RFC
+│   ├── api/             # API 接口规范
+│   └── testing/         # 测试策略
+├── docs/                # 用户文档与开发文档
+│   ├── tutorial/        # 教程
+│   ├── architecture/    # 架构说明
+│   ├── api/             # API 使用指南
+│   └── development/     # 开发指南
 ├── src/
 │   ├── main.rs          # CLI 入口（clap）
 │   ├── lib.rs           # Library 入口
 │   ├── error.rs         # BwaError / BwaResult<T>
 │   ├── io/              # 输入输出
-│   │   ├── fasta.rs     # FASTA 解析器
-│   │   ├── fastq.rs     # FASTQ 解析器
-│   │   └── sam.rs       # SAM 格式输出
 │   ├── index/           # FM 索引
-│   │   ├── sa.rs        # 后缀数组构建
-│   │   ├── bwt.rs       # BWT 构建
-│   │   ├── fm.rs        # FM 索引核心
-│   │   └── builder.rs   # 索引构建入口
 │   ├── align/           # 比对算法
-│   │   ├── mod.rs       # AlignOpt 配置
-│   │   ├── seed.rs      # SMEM 种子查找
-│   │   ├── chain.rs     # 种子链构建
-│   │   ├── sw.rs        # Smith-Waterman
-│   │   ├── extend.rs    # 链扩展
-│   │   ├── candidate.rs # 候选管理
-│   │   ├── mapq.rs      # MAPQ 估算
-│   │   └── pipeline.rs  # 比对流水线
 │   └── util/            # 工具函数
-│       └── dna.rs       # DNA 编码/解码/反向互补
 ├── tests/               # 集成测试
 ├── benches/             # Criterion 基准测试
 ├── examples/            # 示例代码
 ├── data/                # 测试数据
-├── docs/                # 架构、教程
 └── site/                # VitePress 文档站点
 ```
 
@@ -208,10 +226,11 @@ jobs:
 
 | 文档 | 说明 |
 |------|------|
+| [AGENTS.md](AGENTS.md) | AI 编程助手完整指南 |
 | [README.md](README.md) | 项目介绍（英文）|
 | [README.zh-CN.md](README.zh-CN.md) | 项目介绍（中文）|
-| [docs/architecture.md](docs/architecture.md) | 详细架构设计 |
-| [docs/tutorial.md](docs/tutorial.md) | 从零实现教程 |
+| [specs/](specs/) | **规范文档 (Single Source of Truth)** |
+| [docs/](docs/) | 用户教程与架构文档 |
 | [ROADMAP.md](ROADMAP.md) | 开发路线图 |
 | [CHANGELOG.md](CHANGELOG.md) | 变更日志 |
 

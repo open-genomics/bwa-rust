@@ -2,6 +2,23 @@
 
 > 本文件为 Claude Code (claude.ai/code) 提供项目上下文和开发指导。
 
+---
+
+## Project Philosophy: Spec-Driven Development (SDD)
+
+本项目严格遵循**规范驱动开发（Spec-Driven Development）**范式。所有的代码实现必须以 `/specs` 目录下的规范文档为唯一事实来源（Single Source of Truth）。
+
+### AI Agent Workflow
+
+1. **审查 Spec**: 在编写代码前，先阅读 `/specs` 下的相关文档
+2. **Spec 优先**: 新功能或接口变更必须先更新 Spec 文档
+3. **遵守 Spec**: 代码实现必须 100% 遵守 Spec 定义
+4. **按 Spec 测试**: 测试用例需覆盖 Spec 中的所有验收标准
+
+> 详细工作流指令见 [AGENTS.md](AGENTS.md)
+
+---
+
 ## 项目概览
 
 **bwa-rust** 是一个用 Rust 从零实现的 BWA-MEM 风格 DNA 短序列比对器。
@@ -19,10 +36,11 @@
 
 | 指标 | 状态 |
 |------|------|
-| 版本 | v0.1.0 |
+| 版本 | v0.2.0 |
 | 测试 | 151 单元 + 11 集成 + 5 模块测试 ✅ |
 | CI | GitHub Actions (fmt → clippy → test → release) |
 | 文档 | 架构文档、教程、VitePress 站点 |
+| 规范 | `/specs/` 目录 (SDD 工作流) |
 
 ---
 
@@ -275,9 +293,11 @@ cargo test align_opt_rejects_zero_band_width
 
 | 文档 | 说明 |
 |------|------|
+| [AGENTS.md](AGENTS.md) | AI 编程助手完整指南 |
 | [README.md](README.md) | 项目介绍（英文） |
 | [README.zh-CN.md](README.zh-CN.md) | 项目介绍（中文） |
-| [docs/architecture.md](docs/architecture.md) | 详细架构设计 |
-| [docs/tutorial.md](docs/tutorial.md) | 从零实现教程 |
+| [specs/](specs/) | **规范文档 (Single Source of Truth)** |
+| [docs/](docs/) | 用户教程与架构文档 |
 | [ROADMAP.md](ROADMAP.md) | 开发路线图 |
 | [CHANGELOG.md](CHANGELOG.md) | 变更日志 |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | 贡献指南 |
