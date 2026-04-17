@@ -6,6 +6,7 @@
 .vscode/
 .idea/
 .windsurf/
+.windsurf/
 *.swp
 *.swo
 *.iml
