@@ -1,0 +1,24 @@
+# Global owners
+* @LessUp
+
+# Core source code
+/src/ @LessUp
+/src/index/ @LessUp
+/src/align/ @LessUp
+/src/io/ @LessUp
+/src/util/ @LessUp
+
+# CI/CD configuration
+/.github/workflows/ @LessUp
+
+# Documentation
+/docs/ @LessUp
+/site/ @LessUp
+
+# Specifications (critical - single source of truth)
+/specs/ @LessUp
+
+# Configuration files
+*.toml @LessUp
+Cargo.lock @LessUp
+package.json @LessUp

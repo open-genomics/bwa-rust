@@ -1,0 +1,55 @@
+name: Benchmark
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - 'src/**'
+      - 'Cargo.toml'
+      - 'benches/**'
+  pull_request:
+    branches: [main, master]
+    paths:
+      - 'src/**'
+      - 'Cargo.toml'
+      - 'benches/**'
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+permissions:
+  contents: read
+  # 基准测试图表需要以下权限
+  # deployments: write  # 如果使用 github-action-benchmark 的 gh-pages 模式
+
+concurrency:
+  group: bench-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  benchmark:
+    name: Performance Benchmark
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "bench"
+          cache-on-failure: true
+
+      - name: Run benchmarks
+        run: cargo bench -- --noplot
+
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results
+          path: target/criterion/
+          retention-days: 30

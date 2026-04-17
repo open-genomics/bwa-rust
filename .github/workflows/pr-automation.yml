@@ -1,0 +1,60 @@
+name: PR Automation
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review, converted_to_draft]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  # 自动标记 PR 大小
+  label-size:
+    name: Label PR Size
+    runs-on: ubuntu-latest
+    steps:
+      - name: Label PR based on size
+        uses: codelytv/pr-size-labeler@v1
+        with:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          xs_label: 'size/xs'
+          xs_max_size: 10
+          s_label: 'size/s'
+          s_max_size: 100
+          m_label: 'size/m'
+          m_max_size: 500
+          l_label: 'size/l'
+          l_max_size: 1000
+          xl_label: 'size/xl'
+          fail_if_xl: false
+          message_if_xl: |
+            ⚠️ **This PR is quite large!**
+            
+            Consider breaking it down into smaller, more focused PRs for easier review.
+          files_to_ignore: |
+            "*.lock"
+            "*.snap"
+
+  # 欢迎新贡献者
+  welcome:
+    name: Welcome New Contributors
+    runs-on: ubuntu-latest
+    if: github.event.action == 'opened'
+    steps:
+      - name: Greet contributor
+        uses: actions/first-interaction@v1
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          pr-message: |
+            🎉 **Welcome to bwa-rust!**
+            
+            Thank you for your first pull request! 
+            
+            Please ensure:
+            - [ ] All CI checks pass
+            - [ ] CHANGELOG.md is updated if needed
+            - [ ] Documentation is updated if needed
+            
+            A maintainer will review your PR soon. Feel free to ask questions!

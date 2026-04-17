@@ -10,9 +10,14 @@ env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  RUSTFLAGS: "-D warnings"
+  CARGO_INCREMENTAL: 0  # CI 环境禁用增量编译，减少缓存大小
+  CARGO_NET_RETRY: 10   # 网络重试次数
+  RUSTUP_MAX_RETRIES: 10  # Rustup 重试次数
 
 permissions:
   contents: read
+  checks: write        # 用于测试报告
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -36,6 +41,14 @@ jobs:
       - name: Check formatting
         run: cargo fmt --all -- --check
 
+      - name: Check for trailing whitespace
+        run: |
+          if grep -rI '[[:space:]]$' --include='*.rs' --include='*.md' --include='*.toml' --include='*.yml' src/ docs/ specs/ benches/ tests/ .github/; then
+            echo "❌ Found trailing whitespace!"
+            exit 1
+          fi
+          echo "✅ No trailing whitespace found"
+
   clippy:
     name: Clippy
     runs-on: ubuntu-latest
@@ -47,17 +60,12 @@ jobs:
         with:
           components: clippy
 
-      - name: Cache cargo registry & build
-        uses: actions/cache@v4
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-clippy-${{ hashFiles('Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-clippy-
-            ${{ runner.os }}-
+          shared-key: "clippy"
+          cache-on-failure: true
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Run clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
@@ -86,17 +94,12 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
-      - name: Cache cargo registry & build
-        uses: actions/cache@v4
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-test-${{ hashFiles('Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-test-
-            ${{ runner.os }}-
+          shared-key: "${{ matrix.target }}"
+          cache-on-failure: true
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Run tests
         run: cargo test --all-targets --all-features
@@ -114,17 +117,24 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Cache cargo registry & build
-        uses: actions/cache@v4
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-build-${{ hashFiles('Cargo.lock') }}
+          shared-key: "build"
+          cache-on-failure: true
 
       - name: Build release
         run: cargo build --release
+
+      - name: Check binary size
+        run: |
+          echo "=== Binary Size ==="
+          ls -lh target/release/bwa-rust || echo "Binary not found"
+          echo ""
+          echo "=== Stripped Size ==="
+          cp target/release/bwa-rust target/release/bwa-rust-unstripped
+          strip target/release/bwa-rust
+          ls -lh target/release/bwa-rust || echo "Binary not found"
 
       - name: Upload binary
         uses: actions/upload-artifact@v4

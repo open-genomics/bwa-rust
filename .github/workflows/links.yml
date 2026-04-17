@@ -1,0 +1,51 @@
+name: Check Links
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - 'docs/**'
+      - 'site/**'
+      - 'README*.md'
+      - 'CHANGELOG.md'
+  pull_request:
+    branches: [main, master]
+    paths:
+      - 'docs/**'
+      - 'site/**'
+      - 'README*.md'
+  schedule:
+    - cron: '0 0 1 * *'  # 每月 1 号运行
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  link-check:
+    name: Check Markdown Links
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check links in documentation
+        uses: lycheeverse/lychee-action@v1
+        with:
+          args: >
+            --verbose
+            --no-progress
+            --exclude-all-private
+            --timeout 30
+            '**/*.md'
+            'site/**/*.md'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create issue for broken links
+        if: failure() && github.event_name == 'schedule'
+        uses: peter-evans/create-issue-from-file@v5
+        with:
+          title: '🔗 Broken Links Detected'
+          content-filepath: ./lychee/out.md
+          labels: documentation, bug

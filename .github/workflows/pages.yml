@@ -34,6 +34,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0  # Required for lastUpdated feature
+          persist-credentials: false  # 安全增强
 
       - uses: actions/setup-node@v4
         with:

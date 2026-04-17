@@ -14,14 +14,17 @@ We take security seriously. If you discover a security vulnerability, please fol
 ### 🔒 Private Reporting (Recommended)
 
 1. **Do NOT open a public issue**
-2. Email the maintainer directly or use GitHub's private vulnerability reporting:
-   - Go to [Security Advisories](https://github.com/LessUp/bwa-rust/security/advisories)
+2. Use GitHub's private vulnerability reporting:
+   - Go to [Security Advisories](https://github.com/LessUp/bwa-rust/security/advisories/new)
    - Click "Report a vulnerability"
-3. Include:
+   - Fill in the vulnerability details
+3. Alternatively, email the maintainer directly (check commit history for email)
+4. Include:
    - Description of the vulnerability
    - Steps to reproduce
    - Potential impact
    - Suggested fix (if any)
+   - Disclosure timeline preference
 
 ### ⏱️ Response Timeline
 
