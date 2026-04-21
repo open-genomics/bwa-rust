@@ -87,7 +87,7 @@ const baseConfig = defineConfig({
           { text: '📚 API', link: '/api/', activeMatch: '/api/' },
           { text: '🗺️ 路线图', link: '/roadmap' },
           {
-            text: '📦 v0.2.0',
+            text: '📦 v0.3.0-dev',
             items: [
               { text: '更新日志', link: '/changelog' },
               { text: 'GitHub Releases', link: 'https://github.com/LessUp/bwa-rust/releases' },
@@ -201,7 +201,7 @@ const baseConfig = defineConfig({
           { text: '📚 API', link: '/en/api/', activeMatch: '/en/api/' },
           { text: '🗺️ Roadmap', link: '/en/roadmap' },
           {
-            text: '📦 v0.2.0',
+            text: '📦 v0.3.0-dev',
             items: [
               { text: 'Changelog', link: '/en/changelog' },
               { text: 'GitHub Releases', link: 'https://github.com/LessUp/bwa-rust/releases' },

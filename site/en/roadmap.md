@@ -1,6 +1,6 @@
 # Roadmap
 
-> **Current version: v0.1.0** — Single-end BWA-MEM style aligner, all planned tasks completed.
+> **Current Version: v0.2.0** — Single-end BWA-MEM style aligner, bilingual docs, memory protection. v0.3.0 paired-end alignment in progress.
 
 ---
 
@@ -33,6 +33,20 @@ Implement a **Rust aligner inspired by BWA**:
 | Alignment quality | Semi-global refinement, clip penalty ranking | ✅ |
 | Input validation | FASTA error detection, parameter validation | ✅ |
 | Code quality | Named constants, API doc comments | ✅ |
+
+---
+
+## v0.3.0 🚧 In Progress
+
+| Phase | Content | Status |
+|-------|---------|:------:|
+| **Spec Design** | Product spec, RFC technical design | ✅ |
+| **PE Parsing** | Paired FASTQ parsing, interleaved format | ✅ |
+| **Insert Size** | Median/MAD estimation, auto threshold | ✅ |
+| **Pairing Logic** | Pair scoring, orientation validation | 🚧 |
+| **Mate Rescue** | Unmapped mate rescue | 📋 |
+| **SAM Output** | PE FLAG/TLEN/RNEXT/PNEXT | 📋 |
+| **Testing** | PE integration tests, correctness validation | 📋 |
 
 ---
 

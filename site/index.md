@@ -172,24 +172,28 @@ bwa-rust mem ref.fa reads.fq -t 8 -o output.sam
 </div>
 
 <!-- 信任徽章 -->
-<div class="trust-badges">
-  <div class="badge-item">
-    <span class="badge-icon">✅</span>
-    <span>168 项测试全通过</span>
-  </div>
-  <div class="badge-item">
-    <span class="badge-icon">🚀</span>
-    <span>GitHub Actions CI</span>
-  </div>
-  <div class="badge-item">
-    <span class="badge-icon">📦</span>
-    <span>跨平台支持</span>
-  </div>
-  <div class="badge-item">
-    <span class="badge-icon">🌐</span>
-    <span>中英双语文档</span>
-  </div>
-</div>
+  <div class="trust-badges">
+   <div class="badge-item">
+     <span class="badge-icon">✅</span>
+     <span>175 项测试全通过</span>
+   </div>
+   <div class="badge-item">
+     <span class="badge-icon">🚀</span>
+     <span>GitHub Actions CI</span>
+   </div>
+   <div class="badge-item">
+     <span class="badge-icon">📦</span>
+     <span>跨平台支持</span>
+   </div>
+   <div class="badge-item">
+     <span class="badge-icon">🌐</span>
+     <span>中英双语文档</span>
+   </div>
+   <div class="badge-item">
+     <span class="badge-icon">🔬</span>
+     <span>v0.3.0 开发中</span>
+   </div>
+ </div>
 
 <style>
 /* ===== 动态统计区域 ===== */

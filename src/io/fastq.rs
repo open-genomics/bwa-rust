@@ -309,11 +309,8 @@ mod tests {
     fn parse_paired_separate_files() {
         let data1 = b"@read1/1\nACGT\n+\nIIII\n@read2/1\nGGCC\n+\nHHHH\n";
         let data2 = b"@read1/2\nTTAA\n+\nIIII\n@read2/2\nCCGG\n+\nHHHH\n";
-        
-        let mut r = PairedFastqReader::new_separate(
-            Cursor::new(&data1[..]),
-            Cursor::new(&data2[..])
-        );
+
+        let mut r = PairedFastqReader::new_separate(Cursor::new(&data1[..]), Cursor::new(&data2[..]));
 
         let p1 = r.next_pair().unwrap().unwrap();
         assert_eq!(p1.name, "read1");
@@ -332,8 +329,9 @@ mod tests {
 
     #[test]
     fn parse_paired_interleaved() {
-        let data = b"@read1/1\nACGT\n+\nIIII\n@read1/2\nTTAA\n+\nJJJJ\n@read2/1\nGGCC\n+\nHHHH\n@read2/2\nCCGG\n+\nKKKK\n";
-        
+        let data =
+            b"@read1/1\nACGT\n+\nIIII\n@read1/2\nTTAA\n+\nJJJJ\n@read2/1\nGGCC\n+\nHHHH\n@read2/2\nCCGG\n+\nKKKK\n";
+
         let mut r: PairedFastqReader<_, std::io::Empty> = PairedFastqReader::new_interleaved(Cursor::new(&data[..]));
 
         let p1 = r.next_pair().unwrap().unwrap();
@@ -353,11 +351,8 @@ mod tests {
     fn parse_paired_name_mismatch() {
         let data1 = b"@read1/1\nACGT\n+\nIIII\n";
         let data2 = b"@read2/2\nTTAA\n+\nJJJJ\n";
-        
-        let mut r = PairedFastqReader::new_separate(
-            Cursor::new(&data1[..]),
-            Cursor::new(&data2[..])
-        );
+
+        let mut r = PairedFastqReader::new_separate(Cursor::new(&data1[..]), Cursor::new(&data2[..]));
 
         assert!(r.next_pair().is_err());
     }
@@ -366,11 +361,8 @@ mod tests {
     fn parse_paired_r1_has_more_reads() {
         let data1 = b"@read1/1\nACGT\n+\nIIII\n@read2/1\nGGCC\n+\nHHHH\n";
         let data2 = b"@read1/2\nTTAA\n+\nJJJJ\n";
-        
-        let mut r = PairedFastqReader::new_separate(
-            Cursor::new(&data1[..]),
-            Cursor::new(&data2[..])
-        );
+
+        let mut r = PairedFastqReader::new_separate(Cursor::new(&data1[..]), Cursor::new(&data2[..]));
 
         r.next_pair().unwrap();
         assert!(r.next_pair().is_err());

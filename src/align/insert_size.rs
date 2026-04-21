@@ -55,10 +55,7 @@ impl InsertSizeStats {
             sorted[mid] as f64
         };
 
-        let deviations: Vec<f64> = sorted
-            .iter()
-            .map(|&x| (x as f64 - self.median).abs())
-            .collect();
+        let deviations: Vec<f64> = sorted.iter().map(|&x| (x as f64 - self.median).abs()).collect();
 
         let mut sorted_devs = deviations;
         sorted_devs.sort_by(|a, b| a.partial_cmp(b).unwrap_or(Ordering::Equal));

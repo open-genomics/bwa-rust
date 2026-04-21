@@ -166,24 +166,28 @@ bwa-rust mem ref.fa reads.fq -t 8 -o output.sam
   </div>
 </div>
 
-<div class="trust-badges">
-  <div class="badge-item">
-    <span class="badge-icon">✅</span>
-    <span>168 Tests Passing</span>
-  </div>
-  <div class="badge-item">
-    <span class="badge-icon">🚀</span>
-    <span>GitHub Actions CI</span>
-  </div>
-  <div class="badge-item">
-    <span class="badge-icon">📦</span>
-    <span>Cross-Platform</span>
-  </div>
-  <div class="badge-item">
-    <span class="badge-icon">🌐</span>
-    <span>Bilingual Docs</span>
-  </div>
-</div>
+  <div class="trust-badges">
+   <div class="badge-item">
+     <span class="badge-icon">✅</span>
+     <span>175 Tests Passing</span>
+   </div>
+   <div class="badge-item">
+     <span class="badge-icon">🚀</span>
+     <span>GitHub Actions CI</span>
+   </div>
+   <div class="badge-item">
+     <span class="badge-icon">📦</span>
+     <span>Cross-Platform</span>
+   </div>
+   <div class="badge-item">
+     <span class="badge-icon">🌐</span>
+     <span>Bilingual Docs</span>
+   </div>
+   <div class="badge-item">
+     <span class="badge-icon">🔬</span>
+     <span>v0.3.0 In Development</span>
+   </div>
+ </div>
 
 <style>
 .stats-section {
