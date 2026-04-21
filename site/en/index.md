@@ -23,11 +23,11 @@ features:
   - icon: 🧬
     title: FM Index
     details: Suffix Array + BWT + Sparse SA Sampling, single .fm file with magic number
-    link: /en/guide/index-building
+    link: /en/guide/architecture
   - icon: 🎯
     title: BWA-MEM Style
     details: SMEM seeds → Chain building → Banded Smith-Waterman → Semi-global refinement
-    link: /en/guide/alignment
+    link: /en/guide/architecture
   - icon: 📄
     title: SAM Output
     details: Full @HD/@SQ/@PG headers, CIGAR, MAPQ, AS/XS/NM tags, SAM compliant
@@ -35,11 +35,11 @@ features:
   - icon: ⚡
     title: Multi-threaded
     details: Rayon-based read-level parallelism with custom thread pool
-    link: /en/guide/performance
+    link: /en/guide/getting-started
   - icon: 🛡️
     title: Memory Protection
     details: max_occ / max_chains / max_alignments limits prevent memory explosion
-    link: /en/guide/memory-protection
+    link: /en/guide/getting-started
   - icon: 🦀
     title: Rust Safety
     details: Zero unsafe code with compile-time safety guarantees
@@ -185,7 +185,7 @@ bwa-rust mem ref.fa reads.fq -t 8 -o output.sam
    </div>
    <div class="badge-item">
      <span class="badge-icon">🔬</span>
-     <span>v0.3.0 In Development</span>
+     <span>v0.2.0 Stable</span>
    </div>
  </div>
 

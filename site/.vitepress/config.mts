@@ -75,19 +75,11 @@ const baseConfig = defineConfig({
       themeConfig: {
         nav: [
           { text: '📖 文档', link: '/guide/getting-started', activeMatch: '/guide/' },
-          { 
-            text: '🔬 架构',
-            items: [
-              { text: '架构概述', link: '/guide/architecture' },
-              { text: '索引构建', link: '/guide/index-building' },
-              { text: '比对算法', link: '/guide/alignment' },
-              { text: '性能优化', link: '/guide/performance' },
-            ],
-          },
+          { text: '🔬 架构', link: '/guide/architecture' },
           { text: '📚 API', link: '/api/', activeMatch: '/api/' },
           { text: '🗺️ 路线图', link: '/roadmap' },
           {
-            text: '📦 v0.3.0-dev',
+            text: '📦 v0.2.0',
             items: [
               { text: '更新日志', link: '/changelog' },
               { text: 'GitHub Releases', link: 'https://github.com/LessUp/bwa-rust/releases' },
@@ -104,8 +96,7 @@ const baseConfig = defineConfig({
                 collapsed: false,
                 items: [
                   { text: '快速入门', link: 'getting-started' },
-                  { text: '安装指南', link: 'installation' },
-                  { text: '第一个示例', link: 'first-example' },
+                  { text: '算法教程', link: 'tutorial' },
                 ],
               },
               {
@@ -113,19 +104,6 @@ const baseConfig = defineConfig({
                 collapsed: false,
                 items: [
                   { text: '架构总览', link: 'architecture' },
-                  { text: '索引构建', link: 'index-building' },
-                  { text: '比对流程', link: 'alignment' },
-                  { text: '性能特性', link: 'performance' },
-                ],
-              },
-              {
-                text: '🧬 算法详解',
-                collapsed: false,
-                items: [
-                  { text: 'FM 索引原理', link: 'fm-index' },
-                  { text: 'SMEM 种子', link: 'smem-seeds' },
-                  { text: 'Smith-Waterman', link: 'smith-waterman' },
-                  { text: '种子链', link: 'seed-chains' },
                 ],
               },
             ],
@@ -189,19 +167,11 @@ const baseConfig = defineConfig({
       themeConfig: {
         nav: [
           { text: '📖 Docs', link: '/en/guide/getting-started', activeMatch: '/en/guide/' },
-          { 
-            text: '🔬 Architecture',
-            items: [
-              { text: 'Overview', link: '/en/guide/architecture' },
-              { text: 'Index Building', link: '/en/guide/index-building' },
-              { text: 'Alignment', link: '/en/guide/alignment' },
-              { text: 'Performance', link: '/en/guide/performance' },
-            ],
-          },
+          { text: '🔬 Architecture', link: '/en/guide/architecture' },
           { text: '📚 API', link: '/en/api/', activeMatch: '/en/api/' },
           { text: '🗺️ Roadmap', link: '/en/roadmap' },
           {
-            text: '📦 v0.3.0-dev',
+            text: '📦 v0.2.0',
             items: [
               { text: 'Changelog', link: '/en/changelog' },
               { text: 'GitHub Releases', link: 'https://github.com/LessUp/bwa-rust/releases' },
@@ -218,28 +188,14 @@ const baseConfig = defineConfig({
                 collapsed: false,
                 items: [
                   { text: 'Quick Start', link: 'getting-started' },
-                  { text: 'Installation', link: 'installation' },
-                  { text: 'First Example', link: 'first-example' },
+                  { text: 'Tutorial', link: 'tutorial' },
                 ],
               },
               {
                 text: '🔬 Core Concepts',
                 collapsed: false,
                 items: [
-                  { text: 'Overview', link: 'architecture' },
-                  { text: 'Index Building', link: 'index-building' },
-                  { text: 'Alignment', link: 'alignment' },
-                  { text: 'Performance', link: 'performance' },
-                ],
-              },
-              {
-                text: '🧬 Algorithms',
-                collapsed: false,
-                items: [
-                  { text: 'FM Index', link: 'fm-index' },
-                  { text: 'SMEM Seeds', link: 'smem-seeds' },
-                  { text: 'Smith-Waterman', link: 'smith-waterman' },
-                  { text: 'Seed Chains', link: 'seed-chains' },
+                  { text: 'Architecture', link: 'architecture' },
                 ],
               },
             ],

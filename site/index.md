@@ -23,11 +23,11 @@ features:
   - icon: 🧬
     title: FM 索引构建
     details: 后缀数组 + BWT + 稀疏 SA 采样，单一 .fm 文件，magic number 与版本兼容检查
-    link: /guide/index-building
+    link: /guide/architecture
   - icon: 🎯
     title: BWA-MEM 风格比对
     details: SMEM 种子查找 → 链构建 → 带状 Smith-Waterman → semi-global 精细化
-    link: /guide/alignment
+    link: /guide/architecture
   - icon: 📄
     title: 标准 SAM 输出
     details: 完整 @HD/@SQ/@PG header、CIGAR、MAPQ、AS/XS/NM 标签
@@ -35,11 +35,11 @@ features:
   - icon: ⚡
     title: 多线程并行
     details: 基于 rayon 的 reads 级并行，自定义线程池，多核充分利用
-    link: /guide/performance
+    link: /guide/getting-started
   - icon: 🛡️
     title: 内存安全防护
     details: max_occ / max_chains / max_alignments 三层防护，防止内存爆炸
-    link: /guide/memory-protection
+    link: /guide/getting-started
   - icon: 🦀
     title: Rust 内存安全
     details: 零 unsafe 代码，编译期安全保证；jemalloc 提升多线程吞吐
@@ -191,7 +191,7 @@ bwa-rust mem ref.fa reads.fq -t 8 -o output.sam
    </div>
    <div class="badge-item">
      <span class="badge-icon">🔬</span>
-     <span>v0.3.0 开发中</span>
+     <span>v0.2.0 稳定版</span>
    </div>
  </div>
 

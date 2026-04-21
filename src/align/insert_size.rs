@@ -30,9 +30,10 @@ impl InsertSizeStats {
     }
 
     pub fn add_sample(&mut self, insert_size: i32) {
+        self.sample_count += 1;
+
         if self.samples.len() < MAX_SAMPLES {
             self.samples.push(insert_size);
-            self.sample_count += 1;
         }
 
         if self.sample_count % UPDATE_INTERVAL == 0 && self.sample_count > 0 {
@@ -166,8 +167,14 @@ mod tests {
 
         stats.sample_count = 200;
 
+        // median = 200, mad = 50, tolerance = 150
+        // For insert_size = 400: diff = 200, penalty = (200 - 150) / 100 = 0.5 -> 0
         assert_eq!(stats.insert_size_deviation_penalty(200), 0);
-        assert!(stats.insert_size_deviation_penalty(400) > 0);
+        // For insert_size = 500: diff = 300, penalty = (300 - 150) / 100 = 1.5 -> 1
+        assert!(stats.insert_size_deviation_penalty(500) > 0);
+        assert_eq!(stats.insert_size_deviation_penalty(500), 1);
+        // For insert_size = 600: diff = 400, penalty = (400 - 150) / 100 = 2.5 -> 2
+        assert_eq!(stats.insert_size_deviation_penalty(600), 2);
     }
 
     #[test]
