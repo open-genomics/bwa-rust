@@ -304,4 +304,83 @@ mod tests {
         let r1 = r.next_record().unwrap().unwrap();
         assert_eq!(r1.seq, b"acgt");
     }
+
+    #[test]
+    fn parse_paired_separate_files() {
+        let data1 = b"@read1/1\nACGT\n+\nIIII\n@read2/1\nGGCC\n+\nHHHH\n";
+        let data2 = b"@read1/2\nTTAA\n+\nIIII\n@read2/2\nCCGG\n+\nHHHH\n";
+        
+        let mut r = PairedFastqReader::new_separate(
+            Cursor::new(&data1[..]),
+            Cursor::new(&data2[..])
+        );
+
+        let p1 = r.next_pair().unwrap().unwrap();
+        assert_eq!(p1.name, "read1");
+        assert_eq!(p1.seq1, b"ACGT");
+        assert_eq!(p1.qual1, b"IIII");
+        assert_eq!(p1.seq2, b"TTAA");
+        assert_eq!(p1.qual2, b"IIII");
+
+        let p2 = r.next_pair().unwrap().unwrap();
+        assert_eq!(p2.name, "read2");
+        assert_eq!(p2.seq1, b"GGCC");
+        assert_eq!(p2.seq2, b"CCGG");
+
+        assert!(r.next_pair().unwrap().is_none());
+    }
+
+    #[test]
+    fn parse_paired_interleaved() {
+        let data = b"@read1/1\nACGT\n+\nIIII\n@read1/2\nTTAA\n+\nJJJJ\n@read2/1\nGGCC\n+\nHHHH\n@read2/2\nCCGG\n+\nKKKK\n";
+        
+        let mut r: PairedFastqReader<_, std::io::Empty> = PairedFastqReader::new_interleaved(Cursor::new(&data[..]));
+
+        let p1 = r.next_pair().unwrap().unwrap();
+        assert_eq!(p1.name, "read1");
+        assert_eq!(p1.seq1, b"ACGT");
+        assert_eq!(p1.seq2, b"TTAA");
+
+        let p2 = r.next_pair().unwrap().unwrap();
+        assert_eq!(p2.name, "read2");
+        assert_eq!(p2.seq1, b"GGCC");
+        assert_eq!(p2.seq2, b"CCGG");
+
+        assert!(r.next_pair().unwrap().is_none());
+    }
+
+    #[test]
+    fn parse_paired_name_mismatch() {
+        let data1 = b"@read1/1\nACGT\n+\nIIII\n";
+        let data2 = b"@read2/2\nTTAA\n+\nJJJJ\n";
+        
+        let mut r = PairedFastqReader::new_separate(
+            Cursor::new(&data1[..]),
+            Cursor::new(&data2[..])
+        );
+
+        assert!(r.next_pair().is_err());
+    }
+
+    #[test]
+    fn parse_paired_r1_has_more_reads() {
+        let data1 = b"@read1/1\nACGT\n+\nIIII\n@read2/1\nGGCC\n+\nHHHH\n";
+        let data2 = b"@read1/2\nTTAA\n+\nJJJJ\n";
+        
+        let mut r = PairedFastqReader::new_separate(
+            Cursor::new(&data1[..]),
+            Cursor::new(&data2[..])
+        );
+
+        r.next_pair().unwrap();
+        assert!(r.next_pair().is_err());
+    }
+
+    #[test]
+    fn strip_read_suffix_removes_slash_suffixes() {
+        assert_eq!(strip_read_suffix("read1/1"), "read1");
+        assert_eq!(strip_read_suffix("read1/2"), "read1");
+        assert_eq!(strip_read_suffix("read1"), "read1");
+        assert_eq!(strip_read_suffix("read/1/extra"), "read/1/extra");
+    }
 }

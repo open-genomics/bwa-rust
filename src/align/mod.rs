@@ -1,6 +1,7 @@
 pub mod candidate;
 pub mod chain;
 pub mod extend;
+pub mod insert_size;
 pub mod mapq;
 pub mod pipeline;
 pub mod seed;
