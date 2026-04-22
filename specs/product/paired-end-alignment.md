@@ -1,7 +1,7 @@
 # Product Specification: Paired-End Alignment
 
-> **Version**: v0.3.0  
-> **Status**: Draft  
+> **Version**: v0.3.0
+> **Status**: Draft
 > **Last Updated**: 2026-04-22
 
 ## Overview

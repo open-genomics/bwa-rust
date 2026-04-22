@@ -19,11 +19,15 @@ check-filename = true
 
 [default.extend-identifiers]
 # 允许特定的标识符拼写
-# 例如：BWT = "BWT"  # 保留大写的 BWT
+SMEM = "SMEM"  # Super-Maximal Exact Matches (bioinformatics term)
 
 [default.extend-words]
 # 允许特定的单词
-# 例如：hte = "hte"  # 如果这是有意为之
+flate = "flate"  # flate2 crate prefix
+flate2 = "flate2"  # Rust crate for gzip compression
+samse = "samse"  # BWA subcommand for single-end SAM output
+sampe = "sampe"  # BWA subcommand for paired-end SAM output
+SME = "SME"  # Part of SMEM (Super-Maximal Exact Matches)
 
 [type.rs]
 # Rust 特定配置

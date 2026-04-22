@@ -45,7 +45,7 @@ jobs:
           cache-on-failure: true
 
       - name: Run benchmarks
-        run: cargo bench -- --noplot
+        run: cargo bench -- --no-plots
 
       - name: Upload benchmark results
         uses: actions/upload-artifact@v4

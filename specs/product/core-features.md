@@ -1,7 +1,7 @@
 # Product Specification: Core Features
 
-> **Version**: v0.2.0  
-> **Status**: Released  
+> **Version**: v0.2.0
+> **Status**: Released
 > **Last Updated**: 2026-04-16
 
 ## Overview

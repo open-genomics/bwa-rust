@@ -1,6 +1,6 @@
 # Testing Specification
 
-> **Version**: v0.2.0  
+> **Version**: v0.2.0
 > **Last Updated**: 2026-04-16
 
 ## Overview
