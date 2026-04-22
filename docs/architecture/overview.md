@@ -95,15 +95,15 @@ SA = [6, 5, 3, 1, 0, 4, 2]
 FMIndex {
     sigma: 6,           // Alphabet size {$, A, C, G, T, N}
     block: 64,          // Occ sampling block size
-    
+
     c: [0, 1, 2, 3, 4, 5, 6],  // C-table: cumulative frequencies
-    
+
     bwt: Vec<u8>,       // BWT sequence
     occ_samples: Vec<u32>, // Occ sampling table
-    
+
     sa: Vec<u32>,       // Suffix array (full or sparse)
     sa_sample_rate: 4,  // SA sampling interval
-    
+
     contigs: Vec<Contig>, // Contig metadata
     text: Vec<u8>,       // Original encoded text
 }

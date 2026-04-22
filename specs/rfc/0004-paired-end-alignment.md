@@ -1,8 +1,8 @@
 # RFC-0004: Paired-End Alignment Implementation
 
-> **Status**: Draft  
-> **Author**: LessUp  
-> **Created**: 2026-04-22  
+> **Status**: Draft
+> **Author**: LessUp
+> **Created**: 2026-04-22
 > **Target Version**: v0.3.0
 
 ## Summary
@@ -128,16 +128,16 @@ pub fn align_paired(
     // 1. Align both mates independently
     let alignments_r1 = align_single_read(r1, fm, opt);
     let alignments_r2 = align_single_read(r2, fm, opt);
-    
+
     // 2. Score all possible pairs
     let pairs = score_pairs(alignments_r1, alignments_r2, insert_stats);
-    
+
     // 3. Select best pair
     let best_pair = select_best_pair(pairs);
-    
+
     // 4. Attempt mate rescue if needed
     let rescued_pair = rescue_unmapped_mate(best_pair, fm, opt);
-    
+
     rescued_pair
 }
 ```
@@ -162,14 +162,14 @@ fn calculate_pair_score(
     insert_stats: &InsertSizeStats,
 ) -> i32 {
     let base_score = a1.score + a2.score;
-    
+
     // Orientation penalty
     let orientation_penalty = match get_orientation(a1, a2) {
         Orientation::FR => 0,
         Orientation::RF => 5,
         _ => 10,
     };
-    
+
     // Insert size deviation penalty
     let insert_size = calculate_insert_size(a1, a2);
     let deviation_penalty = if insert_stats.sample_count > 100 {
@@ -184,7 +184,7 @@ fn calculate_pair_score(
     } else {
         0
     };
-    
+
     base_score - orientation_penalty - deviation_penalty
 }
 ```
@@ -252,24 +252,24 @@ pub struct InsertSizeEstimator {
 
 impl InsertSizeEstimator {
     pub fn new(initial_max: i32) -> Self { ... }
-    
+
     pub fn add_sample(&mut self, insert_size: i32) {
         if self.samples.len() < MAX_SAMPLES {
             self.samples.push(insert_size);
         }
-        
+
         // Periodically update statistics
         if self.samples.len() % UPDATE_INTERVAL == 0 {
             self.update_stats();
         }
     }
-    
+
     fn update_stats(&mut self) {
         // Calculate median
         self.samples.sort();
         let mid = self.samples.len() / 2;
         self.median = self.samples[mid] as f64;
-        
+
         // Calculate MAD (median absolute deviation)
         let deviations: Vec<f64> = self.samples.iter()
             .map(|&x| (x as f64 - self.median).abs())
@@ -277,7 +277,7 @@ impl InsertSizeEstimator {
         let mut sorted_devs = deviations;
         sorted_devs.sort_by(|a, b| a.partial_cmp(b).unwrap());
         self.mad = sorted_devs[sorted_devs.len() / 2];
-        
+
         // Update max insert size
         self.max_insert = (self.median + 3.0 * self.mad) as i32;
     }
@@ -297,7 +297,7 @@ pub fn format_pe_record(
     let rnext = if mate.contig == alignment.contig { "=" } else { &mate.contig_name };
     let pnext = mate.pos;
     let tlen = calculate_tlen(alignment, mate);
-    
+
     format!(
         "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
         name, flag, alignment.contig_name, alignment.pos,
@@ -322,35 +322,35 @@ fn calculate_pe_flag(
     is_first: bool,
 ) -> u16 {
     let mut flag = 0u16;
-    
+
     flag |= 0x1;  // Paired
-    
+
     if !alignment.is_unmapped && !mate.is_unmapped {
         flag |= 0x2;  // Properly paired
     }
-    
+
     if alignment.is_unmapped {
         flag |= 0x4;
     }
-    
+
     if mate.is_unmapped {
         flag |= 0x8;
     }
-    
+
     if alignment.is_reverse {
         flag |= 0x10;
     }
-    
+
     if mate.is_reverse {
         flag |= 0x20;
     }
-    
+
     if is_first {
         flag |= 0x40;  // First in pair
     } else {
         flag |= 0x80;  // Second in pair
     }
-    
+
     flag
 }
 
@@ -358,15 +358,15 @@ fn calculate_tlen(alignment: &Alignment, mate: &MateInfo) -> i32 {
     if alignment.is_unmapped || mate.is_unmapped {
         return 0;
     }
-    
+
     if alignment.contig != mate.contig {
         return 0;
     }
-    
+
     // TLEN = distance from leftmost to rightmost base
     let left_pos = alignment.pos.min(mate.pos) as i32;
     let right_pos = (alignment.pos.max(mate.pos) + alignment.len) as i32;
-    
+
     if alignment.pos <= mate.pos {
         right_pos - left_pos
     } else {
@@ -385,38 +385,38 @@ enum Command {
     Index {
         // ... existing ...
     },
-    
+
     #[command(about = "Align single-end reads")]
     Align {
         // ... existing ...
     },
-    
+
     #[command(about = "BWA-MEM style alignment (supports PE)")]
     Mem {
         #[arg(help = "Reference FASTA")]
         reference: String,
-        
+
         #[arg(help = "Reads file (FASTQ)")]
         reads: String,
-        
+
         #[arg(help = "Second reads file (for PE)")]
         reads2: Option<String>,
-        
+
         #[arg(short = 'p', long, help = "Input is interleaved FASTQ")]
         interleaved: bool,
-        
+
         #[arg(short = 'I', long, help = "Expected insert size")]
         insert_size: Option<i32>,
-        
+
         #[arg(long, default_value = "500", help = "Maximum insert size")]
         max_insert: i32,
-        
+
         #[arg(long, default_value = "1000", help = "Mate rescue window")]
         rescue_window: u32,
-        
+
         #[arg(long, help = "Disable mate rescue")]
         no_rescue: bool,
-        
+
         // ... existing options ...
     },
 }
@@ -427,7 +427,7 @@ enum Command {
 ### Phase 1: Parsing (Week 1)
 
 - [ ] Add `PairedRead` struct to `io/fastq.rs`
-- [ ] Implement `parse_paired_fastq()` 
+- [ ] Implement `parse_paired_fastq()`
 - [ ] Implement `parse_interleaved_fastq()`
 - [ ] Add gzip support via `flate2` (optional feature)
 - [ ] Add unit tests for PE parsing

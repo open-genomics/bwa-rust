@@ -84,23 +84,23 @@ use bwa_rust::util::dna;
 
 fn main() {
     let reference = b"ACGTACGT";
-    
+
     // 编码
     let norm = dna::normalize_seq(reference);
     let mut text: Vec<u8> = norm.iter().map(|&b| dna::to_alphabet(b)).collect();
     text.push(0);  // sentinel
-    
+
     // 构建索引
     let sa_arr = sa::build_sa(&text);
     let bwt_arr = bwt::build_bwt(&text, &sa_arr);
     let contigs = vec![fm::Contig { name: "ref".into(), len: 8, offset: 0 }];
     let fm_idx = fm::FMIndex::build(text, bwt_arr, sa_arr, contigs, 6, 4);
-    
+
     // 搜索
     let pattern: Vec<u8> = b"CGT".iter().map(|&b| dna::to_alphabet(b)).collect();
     if let Some((l, r)) = fm_idx.backward_search(&pattern) {
         println!("'CGT' 出现 {} 次", r - l);
-        
+
         for pos in fm_idx.sa_interval_positions(l, r) {
             println!("  位置: {}", pos);
         }
@@ -126,12 +126,12 @@ Read: ACGTACGTACGT
 1. 从位置 0 开始，向右扩展，找到最长匹配
    "ACGTACGT" 在参考序列匹配到位置 1000
    → 尝试向左扩展，无法再扩展
-   
+
    Seed 1: read[0:8] → ref[1000:1008]
 
 2. 跳到位置 4，重复上述过程
    "ACGTACGT" 在参考序列匹配到位置 2000
-   
+
    Seed 2: read[4:12] → ref[2000:2008]
 
 注意：两个种子重叠，但各自在其位置上是最长的。
@@ -173,7 +173,7 @@ seeds.sort_by_key(|s| s.rb);
 // 动态规划找最佳链
 for i in 0..seeds.len() {
     best_chain[i] = seeds[i].len;  // 单独一个种子
-    
+
     for j in 0..i {
         if collinear(seeds[j], seeds[i]) {
             let candidate = best_chain[j] + gap_score(seeds[j], seeds[i]);
@@ -309,15 +309,15 @@ let opt = AlignOpt {
     gap_open: 2,
     gap_extend: 1,
     clip_penalty: 1,
-    
+
     // 对齐参数
     band_width: 16,
     score_threshold: 20,
     min_seed_len: 19,
-    
+
     // 并行参数
     threads: 4,
-    
+
     // 内存防护
     max_occ: 500,
     max_chains_per_contig: 5,

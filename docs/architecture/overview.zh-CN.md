@@ -95,15 +95,15 @@ SA = [6, 5, 3, 1, 0, 4, 2]
 FMIndex {
     sigma: 6,           // 字母表大小 {$, A, C, G, T, N}
     block: 64,          // Occ 采样块大小
-    
+
     c: [0, 1, 2, 3, 4, 5, 6],  // C 表：累计频率
-    
+
     bwt: Vec<u8>,       // BWT 序列
     occ_samples: Vec<u32>, // Occ 采样表
-    
+
     sa: Vec<u32>,       // 后缀数组（完整或稀疏）
     sa_sample_rate: 4,  // SA 采样间隔
-    
+
     contigs: Vec<Contig>, // contig 元信息
     text: Vec<u8>,       // 原始编码文本
 }

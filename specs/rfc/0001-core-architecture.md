@@ -1,8 +1,8 @@
 # RFC-0001: Core Architecture
 
-> **Status**: Accepted  
-> **Created**: 2026-02-13  
-> **Updated**: 2026-04-16  
+> **Status**: Accepted
+> **Created**: 2026-02-13
+> **Updated**: 2026-04-16
 > **Version**: v0.2.0
 
 ## Summary

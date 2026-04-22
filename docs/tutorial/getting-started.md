@@ -196,23 +196,23 @@ use bwa_rust::util::dna;
 fn main() {
     // 1. Load or build reference
     let reference = b"ACGTACGTACGT";
-    
+
     // 2. Normalize and encode
     let norm = dna::normalize_seq(reference);
     let mut text: Vec<u8> = norm.iter().map(|&b| dna::to_alphabet(b)).collect();
     text.push(0);  // sentinel
-    
+
     // 3. Build index components
     let sa_arr = sa::build_sa(&text);
     let bwt_arr = bwt::build_bwt(&text, &sa_arr);
-    
+
     // 4. Build FM index
     let contigs = vec![fm::Contig {
         name: "chr1".into(),
         len: 12,
         offset: 0,
     }];
-    
+
     let fm_idx = fm::FMIndex::build(
         text,
         bwt_arr,
@@ -221,13 +221,13 @@ fn main() {
         6,  // sigma
         4,  // SA sample rate
     );
-    
+
     // 5. Search pattern
     let pattern: Vec<u8> = b"CGT".iter().map(|&b| dna::to_alphabet(b)).collect();
-    
+
     if let Some((l, r)) = fm_idx.backward_search(&pattern) {
         println!("Found {} occurrences", r - l);
-        
+
         // Get positions
         for pos in fm_idx.sa_interval_positions(l, r) {
             println!("  At position {}", pos);

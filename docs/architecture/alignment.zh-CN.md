@@ -90,17 +90,17 @@ pub fn find_smem_seeds(
 ) -> Vec<MemSeed> {
     let mut seeds = Vec::new();
     let mut i = 0;
-    
+
     while i < read.len() {
         // 从位置 i 开始，向右找最长匹配
         let (seed_len, sa_interval) = extend_right(fm, &read[i..]);
-        
+
         if seed_len >= min_len && sa_interval.occ() <= max_occ {
             // 尝试向左扩展
             let (left_ext, final_interval) = extend_left(
                 fm, &read[..i], sa_interval
             );
-            
+
             let seed = MemSeed {
                 qb: i - left_ext,     // query begin
                 qe: i + seed_len,     // query end
@@ -108,14 +108,14 @@ pub fn find_smem_seeds(
                 sa_r: final_interval.r,
                 occ: final_interval.occ(),
             };
-            
+
             seeds.push(seed);
             i += seed_len;  // 跳过已覆盖区域
         } else {
             i += 1;
         }
     }
-    
+
     seeds
 }
 ```
@@ -161,13 +161,13 @@ if seed.occ > max_occ {
 // 链得分计算
 fn chain_score(seeds: &[MemSeed]) -> i32 {
     let mut score = 0i32;
-    
+
     for window in seeds.windows(2) {
         let (s1, s2) = (&window[0], &window[1]);
-        
+
         // 种子得分
         score += s1.len() as i32;
-        
+
         // Gap 罚分
         let gap_cost = if collinear(s1, s2) {
             // 共线：根据距离线性罚分
@@ -176,10 +176,10 @@ fn chain_score(seeds: &[MemSeed]) -> i32 {
             // 不共线：重罚
             GAP_PENALTY_INCONSISTENT
         };
-        
+
         score -= gap_cost;
     }
-    
+
     score
 }
 ```
@@ -190,28 +190,28 @@ fn chain_score(seeds: &[MemSeed]) -> i32 {
 pub fn build_chains(seeds: &[MemSeed], read_len: usize) -> Vec<Chain> {
     let mut chains = Vec::new();
     let mut used = vec![false; seeds.len()];
-    
+
     // 按参考位置排序种子
     let mut ordered: Vec<_> = seeds.iter().enumerate().collect();
     ordered.sort_by_key(|(_, s)| s.rb);
-    
+
     // 贪心提取最佳链
     while !used.iter().all(|&x| x) {
         // 对每个未使用的种子，向后 DP 找最佳链
         let best_chain = dp_find_best_chain(&ordered, &used);
-        
+
         if best_chain.score < MIN_CHAIN_SCORE {
             break;
         }
-        
+
         // 标记已使用
         for &idx in &best_chain.seed_indices {
             used[idx] = true;
         }
-        
+
         chains.push(best_chain);
     }
-    
+
     chains
 }
 ```
@@ -221,13 +221,13 @@ pub fn build_chains(seeds: &[MemSeed], read_len: usize) -> Vec<Chain> {
 ```rust
 pub fn filter_chains(chains: &mut Vec<Chain>, ratio: f32) {
     if chains.is_empty() { return; }
-    
+
     // 按得分排序
     chains.sort_by_key(|c| -c.score);
-    
+
     let best_score = chains[0].score;
     let threshold = (best_score as f32 * ratio) as i32;
-    
+
     // 过滤低分链
     chains.retain(|c| c.score >= threshold);
 }
@@ -257,13 +257,13 @@ pub fn banded_sw(
 ) -> SwResult {
     let w = params.band_width;
     let mut dp = vec![vec![0i32; 2 * w + 1]; query.len() + 1];
-    
+
     for i in 1..=query.len() {
         // 只计算带状区域内的单元格
         let center = best_col_from_prev(&dp[i-1]);
         let col_start = center.saturating_sub(w);
         let col_end = (center + w).min(reference.len());
-        
+
         for j in col_start..=col_end {
             // 仿射间隙 DP
             let match_score = if query[i-1] == reference[j-1] {
@@ -271,7 +271,7 @@ pub fn banded_sw(
             } else {
                 -params.mismatch_penalty
             };
-            
+
             dp[i][j - col_start] = max(
                 dp[i-1][j - col_start - 1] + match_score,  // 匹配/错配
                 dp[i-1][j - col_start] - params.gap_extend,  // 纵向 gap
@@ -280,11 +280,11 @@ pub fn banded_sw(
             );
         }
     }
-    
+
     // 回溯生成 CIGAR
     let cigar = traceback(&dp);
     let score = dp.iter().flatten().max().copied().unwrap_or(0);
-    
+
     SwResult { score, cigar }
 }
 ```
@@ -310,24 +310,24 @@ pub fn collect_candidates(
     align_opt: &AlignOpt,
 ) -> Vec<Candidate> {
     let mut candidates = Vec::new();
-    
+
     for chain in chains {
         // 1. 提取参考窗口
         let ref_window = extract_ref_window(chain, &align_opt);
-        
+
         // 2. 执行 SW 对齐
         let sw_result = banded_sw(&chain.query, &ref_window, align_opt.sw_params);
-        
+
         // 3. 过滤低分对齐
         if sw_result.score < align_opt.score_threshold {
             continue;
         }
-        
+
         // 4. 半全局细化
         let refined = semi_global_refinement(
             &chain.query, &ref_window, sw_result
         );
-        
+
         candidates.push(Candidate {
             ref_id: chain.ref_id,
             ref_pos: chain.ref_pos,
@@ -337,7 +337,7 @@ pub fn collect_candidates(
             is_reverse: chain.is_reverse,
         });
     }
-    
+
     candidates
 }
 ```
@@ -349,7 +349,7 @@ pub fn dedup_candidates(candidates: &mut Vec<Candidate>) {
     // 按 (ref_id, ref_pos, is_reverse) 去重
     candidates.sort_by_key(|c| (c.ref_id, c.ref_pos, c.is_reverse));
     candidates.dedup_by_key(|c| (c.ref_id, c.ref_pos, c.is_reverse));
-    
+
     // 按对齐质量排序（分数 - clip_penalty）
     candidates.sort_by(|a, b| {
         let score_a = a.score - a.clipped_bases;
@@ -373,15 +373,15 @@ pub struct AlignOpt {
     pub gap_open: i32,
     pub gap_extend: i32,
     pub clip_penalty: i32,
-    
+
     // 对齐参数
     pub band_width: usize,
     pub score_threshold: i32,
     pub min_seed_len: usize,
-    
+
     // 并行参数
     pub threads: usize,
-    
+
     // 内存防护
     pub max_occ: usize,
     pub max_chains_per_contig: usize,
@@ -412,7 +412,7 @@ pub fn align_reads(
         .num_threads(opt.threads)
         .build()
         .expect("Failed to create thread pool");
-    
+
     pool.install(|| {
         reads.par_iter().map(|read| {
             align_single_read(fm, read, opt)
@@ -429,19 +429,19 @@ fn align_single_read(
     let forward_seeds = find_smem_seeds(fm, &read.seq, opt.min_seed_len, opt.max_occ);
     let forward_chains = build_chains(&forward_seeds, read.seq.len());
     let forward_candidates = collect_candidates(&forward_chains, opt);
-    
+
     // 反向互补
     let revcomp_seq = revcomp(&read.seq);
     let reverse_seeds = find_smem_seeds(fm, &revcomp_seq, opt.min_seed_len, opt.max_occ);
     let reverse_chains = build_chains(&reverse_seeds, read.seq.len());
     let mut reverse_candidates = collect_candidates(&reverse_chains, opt);
     reverse_candidates.iter_mut().for_each(|c| c.is_reverse = true);
-    
+
     // 合并、去重、排序
     let mut all = forward_candidates;
     all.extend(reverse_candidates);
     dedup_candidates(&mut all);
-    
+
     // 选择主/次比对
     select_primary_and_secondary(&all, opt.max_alignments_per_read)
 }

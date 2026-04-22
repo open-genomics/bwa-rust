@@ -103,7 +103,7 @@ pub fn build_sa(text: &[u8]) -> Vec<usize> {
     let n = text.len();
     let mut sa: Vec<usize> = (0..n).collect();
     let mut rank: Vec<i32> = text.iter().map(|&c| c as i32).collect();
-    
+
     let mut k = 1;
     loop {
         // Sort by (rank[i], rank[i+k])
@@ -112,20 +112,20 @@ pub fn build_sa(text: &[u8]) -> Vec<usize> {
             let r2 = if i + k < n { rank[i + k] } else { -1 };
             (r1, r2)
         });
-        
+
         // Update ranks
         let mut new_rank = vec![0i32; n];
         new_rank[sa[0]] = 0;
         for i in 1..n {
-            new_rank[sa[i]] = new_rank[sa[i-1]] 
+            new_rank[sa[i]] = new_rank[sa[i-1]]
                 + if is_different(&sa, i, k, &rank) { 1 } else { 0 };
         }
-        
+
         rank = new_rank;
         if rank[sa[n-1]] == (n - 1) as i32 { break; }
         k *= 2;
     }
-    
+
     sa
 }
 ```
@@ -170,12 +170,12 @@ BWT[i] = text[(SA[i] - 1) mod n]
 pub fn build_bwt(text: &[u8], sa: &[usize]) -> Vec<u8> {
     let n = text.len();
     let mut bwt = Vec::with_capacity(n);
-    
+
     for &sa_i in sa {
         let pos = if sa_i == 0 { n - 1 } else { sa_i - 1 };
         bwt.push(text[pos]);
     }
-    
+
     bwt
 }
 ```
@@ -213,18 +213,18 @@ The FM-index consists of two main components:
 // C[c] = first position of character c in BWT
 pub fn build_c(bwt: &[u8], sigma: usize) -> Vec<u32> {
     let mut count = vec![0u32; sigma];
-    
+
     // Count character frequencies
     for &c in bwt {
         count[c as usize] += 1;
     }
-    
+
     // Compute cumulative frequencies
     let mut c = vec![0u32; sigma + 1];
     for i in 0..sigma {
         c[i + 1] = c[i] + count[i];
     }
-    
+
     c  // c[0]=0, c[1]=count($), c[2]=count($)+count(A), ...
 }
 ```
@@ -245,14 +245,14 @@ impl FMIndex {
         let block_idx = pos / self.block as usize;
         let sample_idx = block_idx * self.sigma as usize + c as usize;
         let base = self.occ_samples[sample_idx];
-        
+
         // Count from last sample point
         let start = block_idx * self.block as usize;
         let count = self.bwt[start..pos]
             .iter()
             .filter(|&&b| b == c)
             .count() as u32;
-        
+
         base + count
     }
 }
@@ -275,16 +275,16 @@ The core operation of FM-index:
 pub fn backward_search(&self, pattern: &[u8]) -> Option<(usize, usize)> {
     let mut l: usize = 0;
     let mut r: usize = self.bwt.len();
-    
+
     for &c in pattern.iter().rev() {
         l = self.c[c as usize] as usize + self.occ(c, l) as usize;
         r = self.c[c as usize] as usize + self.occ(c, r) as usize;
-        
+
         if l >= r {
             return None;  // No match
         }
     }
-    
+
     Some((l, r))  // SA interval [l, r)
 }
 ```

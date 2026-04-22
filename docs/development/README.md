@@ -119,13 +119,13 @@ cargo test --test integration
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_function() {
         let result = function_to_test();
         assert_eq!(result, expected);
     }
-    
+
     #[test]
     fn test_edge_case() {
         // Test boundaries

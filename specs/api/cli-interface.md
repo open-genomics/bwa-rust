@@ -1,7 +1,7 @@
 # API Specification: CLI Interface
 
-> **Version**: v0.2.0  
-> **Status**: Stable  
+> **Version**: v0.2.0
+> **Status**: Stable
 > **Last Updated**: 2026-04-16
 
 ## Overview

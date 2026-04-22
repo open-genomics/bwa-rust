@@ -196,23 +196,23 @@ use bwa_rust::util::dna;
 fn main() {
     // 1. 加载或构建参考序列
     let reference = b"ACGTACGTACGT";
-    
+
     // 2. 归一化和编码
     let norm = dna::normalize_seq(reference);
     let mut text: Vec<u8> = norm.iter().map(|&b| dna::to_alphabet(b)).collect();
     text.push(0);  // 终止符
-    
+
     // 3. 构建索引组件
     let sa_arr = sa::build_sa(&text);
     let bwt_arr = bwt::build_bwt(&text, &sa_arr);
-    
+
     // 4. 构建 FM 索引
     let contigs = vec![fm::Contig {
         name: "chr1".into(),
         len: 12,
         offset: 0,
     }];
-    
+
     let fm_idx = fm::FMIndex::build(
         text,
         bwt_arr,
@@ -221,13 +221,13 @@ fn main() {
         6,  // sigma
         4,  // SA 采样间隔
     );
-    
+
     // 5. 搜索模式
     let pattern: Vec<u8> = b"CGT".iter().map(|&b| dna::to_alphabet(b)).collect();
-    
+
     if let Some((l, r)) = fm_idx.backward_search(&pattern) {
         println!("找到 {} 次出现", r - l);
-        
+
         // 获取位置
         for pos in fm_idx.sa_interval_positions(l, r) {
             println!("  位于位置 {}", pos);

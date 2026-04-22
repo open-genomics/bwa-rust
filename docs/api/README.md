@@ -41,11 +41,11 @@ use bwa_rust::util::dna;
 
 fn main() {
     let fm = FMIndex::load("ref.fm").unwrap();
-    
+
     let pattern: Vec<u8> = b"ACGT".iter()
         .map(|&b| dna::to_alphabet(b))
         .collect();
-    
+
     if let Some((l, r)) = fm.backward_search(&pattern) {
         println!("Found {} occurrences", r - l);
     }

@@ -84,23 +84,23 @@ use bwa_rust::util::dna;
 
 fn main() {
     let reference = b"ACGTACGT";
-    
+
     // Encode
     let norm = dna::normalize_seq(reference);
     let mut text: Vec<u8> = norm.iter().map(|&b| dna::to_alphabet(b)).collect();
     text.push(0);  // sentinel
-    
+
     // Build index
     let sa_arr = sa::build_sa(&text);
     let bwt_arr = bwt::build_bwt(&text, &sa_arr);
     let contigs = vec![fm::Contig { name: "ref".into(), len: 8, offset: 0 }];
     let fm_idx = fm::FMIndex::build(text, bwt_arr, sa_arr, contigs, 6, 4);
-    
+
     // Search
     let pattern: Vec<u8> = b"CGT".iter().map(|&b| dna::to_alphabet(b)).collect();
     if let Some((l, r)) = fm_idx.backward_search(&pattern) {
         println!("'CGT' occurs {} times", r - l);
-        
+
         for pos in fm_idx.sa_interval_positions(l, r) {
             println!("  At position: {}", pos);
         }
@@ -126,12 +126,12 @@ Read: ACGTACGTACGT
 1. Start at position 0, extend right to find longest match
    "ACGTACGT" matches reference at position 1000
    → Try extending left, cannot extend further
-   
+
    Seed 1: read[0:8] → ref[1000:1008]
 
 2. Jump to position 4, repeat process
    "ACGTACGT" matches reference at position 2000
-   
+
    Seed 2: read[4:12] → ref[2000:2008]
 
 Note: Seeds may overlap, but each is maximal at its position.
@@ -173,7 +173,7 @@ seeds.sort_by_key(|s| s.rb);
 // Dynamic programming for best chain
 for i in 0..seeds.len() {
     best_chain[i] = seeds[i].len;  // single seed
-    
+
     for j in 0..i {
         if collinear(seeds[j], seeds[i]) {
             let candidate = best_chain[j] + gap_score(seeds[j], seeds[i]);
@@ -309,15 +309,15 @@ let opt = AlignOpt {
     gap_open: 2,
     gap_extend: 1,
     clip_penalty: 1,
-    
+
     // Alignment parameters
     band_width: 16,
     score_threshold: 20,
     min_seed_len: 19,
-    
+
     // Parallel parameters
     threads: 4,
-    
+
     // Memory protection
     max_occ: 500,
     max_chains_per_contig: 5,
