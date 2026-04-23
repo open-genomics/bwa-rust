@@ -15,7 +15,12 @@ cd bwa-rust
 
 # Install Rust (if not already installed)
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+
+# Setup git hooks (recommended)
+./scripts/setup-hooks
 ```
+
+**Editor setup**: See [Tooling Guide](tooling.md) for VSCode, Neovim, and Helix configuration.
 
 ### Build and Test
 
@@ -188,6 +193,12 @@ gh release create v0.x.x --notes-file RELEASE_NOTES.md
 
 ---
 
+## AI-Assisted Development
+
+See [AI Workflow Guide](ai-workflow.md) for the canonical workflow combining OpenSpec, worktrees, GitHub CLI, and AI coding assistants.
+
+---
+
 ## Contributing
 
 See [CONTRIBUTING.md](../../CONTRIBUTING.md) for detailed contribution guidelines.
@@ -196,6 +207,8 @@ See [CONTRIBUTING.md](../../CONTRIBUTING.md) for detailed contribution guideline
 
 ## Resources
 
+- [AI Workflow Guide](ai-workflow.md) — AI-assisted development workflow
+- [Tooling Guide](tooling.md) — Editor setup, LSP, hooks, MCP guidance
 - [Architecture Docs](../architecture/)
 - [Tutorial](../tutorial/)
 - [API Reference](../api/)

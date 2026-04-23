@@ -1,19 +1,9 @@
 name: Benchmark
 
 on:
-  push:
-    branches: [main, master]
-    paths:
-      - 'src/**'
-      - 'Cargo.toml'
-      - 'benches/**'
-  pull_request:
-    branches: [main, master]
-    paths:
-      - 'src/**'
-      - 'Cargo.toml'
-      - 'benches/**'
-  workflow_dispatch:
+  workflow_dispatch:  # Manual trigger only
+  schedule:
+    - cron: '0 0 1 * *'  # Monthly on the 1st
 
 env:
   CARGO_TERM_COLOR: always

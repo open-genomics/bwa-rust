@@ -1,52 +1,39 @@
 import { defineConfig } from 'vitepress'
-import { withPwa } from '@vite-pwa/vitepress'
 
 // ============================================
-// 🚀 BWA-RUST: Ultra-Modern VitePress Config
+// bwa-rust 技术文档站配置
+// 定位为：BWA-MEM 算法的 Rust 实现文档
+// 目标用户：生物信息学研究人员、Rust 开发者、算法学习者
 // ============================================
 
-const baseConfig = defineConfig({
-  // Core Configuration
+export default defineConfig({
+  // 基础配置
   title: 'bwa-rust',
-  titleTemplate: ':title | bwa-rust - DNA Sequence Aligner',
-  description: 'A high-performance BWA-MEM style DNA sequence aligner implemented in Rust with zero unsafe code',
-  lang: 'en-US',
-  
+  titleTemplate: ':title | bwa-rust',
+  description: 'BWA-MEM 算法的 Rust 实现 —— 零 unsafe 代码，教育级可读性',
+  lang: 'zh-CN',
+
   base: '/bwa-rust/',
   cleanUrls: true,
   lastUpdated: true,
-  
-  ignoreDeadLinks: [
-    /^https?:\/\/localhost/,
-    /^https?:\/\/127\.0\.0\.1/,
-    /github\.com/,
-  ],
-  
-  // Head - SEO + Performance
+
+  // SEO 和元数据
   head: [
-    ['link', { rel: 'preconnect', href: 'https://fonts.googleapis.com' }],
-    ['link', { rel: 'preconnect', href: 'https://fonts.gstatic.com', crossorigin: '' }],
     ['link', { rel: 'icon', type: 'image/svg+xml', href: '/bwa-rust/logo.svg' }],
-    ['link', { rel: 'apple-touch-icon', sizes: '180x180', href: '/bwa-rust/apple-touch-icon.png' }],
-    ['link', { rel: 'mask-icon', href: '/bwa-rust/logo.svg', color: '#646cff' }],
-    
-    ['meta', { name: 'theme-color', media: '(prefers-color-scheme: light)', content: '#ffffff' }],
-    ['meta', { name: 'theme-color', media: '(prefers-color-scheme: dark)', content: '#1a1a1a' }],
-    ['meta', { name: 'msapplication-TileColor', content: '#646cff' }],
-    ['meta', { name: 'viewport', content: 'width=device-width, initial-scale=1.0, viewport-fit=cover' }],
-    
+    ['meta', { name: 'theme-color', content: '#dea584' }],
+    ['meta', { name: 'viewport', content: 'width=device-width, initial-scale=1.0' }],
+
+    // Open Graph
     ['meta', { property: 'og:type', content: 'website' }],
     ['meta', { property: 'og:site_name', content: 'bwa-rust' }],
-    ['meta', { property: 'og:locale', content: 'en_US' }],
-    ['meta', { property: 'og:locale:alternate', content: 'zh_CN' }],
-    
-    ['meta', { name: 'twitter:card', content: 'summary_large_image' }],
-    
-    ['meta', { name: 'keywords', content: 'bwa-rust,BWA,BWA-MEM,sequence alignment,DNA,bioinformatics,Rust,FM-index' }],
-    ['meta', { name: 'robots', content: 'index, follow' }],
+    ['meta', { property: 'og:title', content: 'bwa-rust - BWA-MEM 算法的 Rust 实现' }],
+    ['meta', { property: 'og:description', content: '零 unsafe 代码的 BWA-MEM 风格序列比对器实现' }],
+
+    // Keywords
+    ['meta', { name: 'keywords', content: 'bwa-rust,BWA,BWA-MEM,DNA,序列比对,生物信息学,Rust,FM索引' }],
   ],
-  
-  // Markdown
+
+  // Markdown 配置
   markdown: {
     theme: {
       light: 'github-light',
@@ -54,257 +41,111 @@ const baseConfig = defineConfig({
     },
     lineNumbers: true,
   },
-  
-  // Vite Configuration
-  vite: {
-    ssr: {
-      noExternal: ['@vite-pwa/vitepress'],
-    },
-    build: {
-      chunkSizeWarningLimit: 1600,
-    },
-  },
-  
-  // Locales
-  locales: {
-    root: {
-      label: '简体中文',
-      lang: 'zh-CN',
-      description: '受 BWA/BWA-MEM 启发的高性能 Rust DNA 序列比对器',
-      link: '/',
-      themeConfig: {
-        nav: [
-          { text: '📖 文档', link: '/guide/getting-started', activeMatch: '/guide/' },
-          { text: '🔬 架构', link: '/guide/architecture' },
-          { text: '📚 API', link: '/api/', activeMatch: '/api/' },
-          { text: '🗺️ 路线图', link: '/roadmap' },
-          {
-            text: '📦 v0.2.0',
-            items: [
-              { text: '更新日志', link: '/changelog' },
-              { text: 'GitHub Releases', link: 'https://github.com/LessUp/bwa-rust/releases' },
-            ],
-          },
-        ],
-        
-        sidebar: {
-          '/guide/': {
-            base: '/guide/',
-            items: [
-              {
-                text: '🚀 开始',
-                collapsed: false,
-                items: [
-                  { text: '快速入门', link: 'getting-started' },
-                  { text: '算法教程', link: 'tutorial' },
-                ],
-              },
-              {
-                text: '🔬 核心概念',
-                collapsed: false,
-                items: [
-                  { text: '架构总览', link: 'architecture' },
-                ],
-              },
-            ],
-          },
-          '/api/': {
-            base: '/api/',
-            items: [
-              {
-                text: '📚 API 参考',
-                collapsed: false,
-                items: [
-                  { text: 'API 概览', link: '' },
-                  { text: 'Index 模块', link: 'index' },
-                  { text: 'Align 模块', link: 'align' },
-                  { text: 'IO 模块', link: 'io' },
-                  { text: 'Util 模块', link: 'util' },
-                ],
-              },
-            ],
-          },
-        },
-        
-        editLink: {
-          pattern: 'https://github.com/LessUp/bwa-rust/edit/main/site/:path',
-          text: '在 GitHub 上编辑此页',
-        },
-        
-        footer: {
-          message: '基于 MIT 许可证发布',
-          copyright: '© 2024-2026 LessUp',
-        },
-        
-        docFooter: {
-          prev: '上一页',
-          next: '下一页',
-        },
-        
-        outline: {
-          label: '本页目录',
-          level: [2, 3],
-        },
-        
-        lastUpdated: {
-          text: '最后更新于',
-          formatOptions: {
-            dateStyle: 'medium',
-            timeStyle: 'short',
-          },
-        },
-        
-        returnToTopLabel: '回到顶部',
-        sidebarMenuLabel: '菜单',
-        darkModeSwitchLabel: '主题',
-      },
-    },
-    en: {
-      label: 'English',
-      lang: 'en-US',
-      description: 'A high-performance BWA-MEM style DNA sequence aligner in Rust',
-      link: '/en/',
-      themeConfig: {
-        nav: [
-          { text: '📖 Docs', link: '/en/guide/getting-started', activeMatch: '/en/guide/' },
-          { text: '🔬 Architecture', link: '/en/guide/architecture' },
-          { text: '📚 API', link: '/en/api/', activeMatch: '/en/api/' },
-          { text: '🗺️ Roadmap', link: '/en/roadmap' },
-          {
-            text: '📦 v0.2.0',
-            items: [
-              { text: 'Changelog', link: '/en/changelog' },
-              { text: 'GitHub Releases', link: 'https://github.com/LessUp/bwa-rust/releases' },
-            ],
-          },
-        ],
-        
-        sidebar: {
-          '/en/guide/': {
-            base: '/en/guide/',
-            items: [
-              {
-                text: '🚀 Getting Started',
-                collapsed: false,
-                items: [
-                  { text: 'Quick Start', link: 'getting-started' },
-                  { text: 'Tutorial', link: 'tutorial' },
-                ],
-              },
-              {
-                text: '🔬 Core Concepts',
-                collapsed: false,
-                items: [
-                  { text: 'Architecture', link: 'architecture' },
-                ],
-              },
-            ],
-          },
-          '/en/api/': {
-            base: '/en/api/',
-            items: [
-              {
-                text: '📚 API Reference',
-                collapsed: false,
-                items: [
-                  { text: 'Overview', link: '' },
-                  { text: 'Index', link: 'index' },
-                  { text: 'Align', link: 'align' },
-                  { text: 'IO', link: 'io' },
-                  { text: 'Util', link: 'util' },
-                ],
-              },
-            ],
-          },
-        },
-        
-        editLink: {
-          pattern: 'https://github.com/LessUp/bwa-rust/edit/main/site/:path',
-          text: 'Edit this page on GitHub',
-        },
-        
-        footer: {
-          message: 'Released under the MIT License',
-          copyright: '© 2024-2026 LessUp',
-        },
-        
-        outline: {
-          label: 'On this page',
-          level: [2, 3],
-        },
-        
-        lastUpdated: {
-          text: 'Last updated',
-          formatOptions: {
-            dateStyle: 'medium',
-            timeStyle: 'short',
-          },
-        },
-      },
-    },
-  },
-  
-  // Theme Config
+
+  // 主题配置
   themeConfig: {
     logo: '/logo.svg',
     siteTitle: 'bwa-rust',
-    
+
+    // 导航栏 - 简洁清晰，全部中文
+    nav: [
+      { text: '首页', link: '/' },
+      { text: '指南', link: '/guide/', activeMatch: '/guide/' },
+      { text: '架构', link: '/architecture/', activeMatch: '/architecture/' },
+      { text: '性能', link: '/benchmarks' },
+      { text: 'API', link: 'https://docs.rs/bwa-rust' },
+      {
+        text: 'v0.2.0',
+        items: [
+          { text: '更新日志', link: '/changelog' },
+          { text: '路线图', link: '/roadmap' },
+          { text: '常见问题', link: '/faq' },
+          { text: 'GitHub', link: 'https://github.com/LessUp/bwa-rust' },
+        ],
+      },
+    ],
+
+    // 侧边栏 - 仅配置实际存在的页面
+    sidebar: {
+      '/guide/': [
+        {
+          text: '使用指南',
+          items: [
+            { text: '概览', link: '/guide/' },
+            { text: '安装', link: '/guide/installation' },
+            { text: '快速开始', link: '/guide/quickstart' },
+          ],
+        },
+      ],
+      '/architecture/': [
+        {
+          text: '架构设计',
+          items: [
+            { text: '概览', link: '/architecture/' },
+            { text: '核心算法', link: '/architecture/algorithms' },
+            { text: '比对流水线', link: '/architecture/pipeline' },
+          ],
+        },
+      ],
+    },
+
+    // 社交链接
     socialLinks: [
       { icon: 'github', link: 'https://github.com/LessUp/bwa-rust' },
     ],
-    
+
+    // 搜索
     search: {
       provider: 'local',
       options: {
         detailedView: true,
-        miniSearch: {
-          options: {
-            fields: ['title', 'titles', 'text'],
-            searchOptions: {
-              fuzzy: 0.2,
-              prefix: true,
-              boost: { title: 5, titles: 3, text: 1 },
-            },
-          },
+      },
+    },
+
+    // 页脚
+    footer: {
+      message: '基于 MIT 许可证发布',
+      copyright: '© 2024-2026 LessUp',
+    },
+
+    // 编辑链接
+    editLink: {
+      pattern: 'https://github.com/LessUp/bwa-rust/edit/master/site/:path',
+      text: '在 GitHub 上编辑此页',
+    },
+
+    // 最后更新时间
+    lastUpdated: {
+      text: '最后更新',
+      formatOptions: {
+        dateStyle: 'short',
+      },
+    },
+
+    // 大纲
+    outline: {
+      label: '本页内容',
+      level: [2, 3],
+    },
+
+    // 返回顶部
+    returnToTopLabel: '返回顶部',
+
+    // 侧边栏菜单
+    sidebarMenuLabel: '菜单',
+
+    // 暗黑模式
+    darkModeSwitchLabel: '主题',
+  },
+
+  // Vite 配置
+  vite: {
+    css: {
+      preprocessorOptions: {
+        scss: {
+          // 如需自定义 CSS 变量可在此配置
         },
       },
     },
-    
-    externalLinkIcon: true,
   },
 })
-
-// PWA Configuration
-const pwaConfig = {
-  mode: 'production',
-  strategies: 'generateSW',
-  registerType: 'autoUpdate',
-  injectRegister: 'auto',
-  
-  manifest: {
-    name: 'bwa-rust Documentation',
-    short_name: 'bwa-rust',
-    description: 'A high-performance BWA-MEM style DNA sequence aligner in Rust',
-    theme_color: '#646cff',
-    background_color: '#ffffff',
-    display: 'standalone',
-    scope: '/bwa-rust/',
-    start_url: '/bwa-rust/',
-    icons: [
-      { src: '/bwa-rust/icons/icon-192x192.png', sizes: '192x192', type: 'image/png' },
-      { src: '/bwa-rust/icons/icon-512x512.png', sizes: '512x512', type: 'image/png' },
-    ],
-  },
-  
-  workbox: {
-    globPatterns: ['**/*.{js,css,html,svg,png,ico,txt,woff2}'],
-    cleanupOutdatedCaches: true,
-  },
-  
-  devOptions: {
-    enabled: false,
-  },
-}
-
-// Export with PWA
-export default withPwa(baseConfig, pwaConfig)

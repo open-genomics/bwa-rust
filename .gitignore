@@ -3,9 +3,10 @@
 **/*.rs.bk
 
 # IDE
-.vscode/
+# .vscode/ is tracked for project-level shared workspace config
+# Personal overrides go in .vscode/*.local.json (ignored via pattern below)
+.vscode/*.local.json
 .idea/
-.windsurf/
 .windsurf/
 *.swp
 *.swo
@@ -48,3 +49,5 @@ site/.vitepress/cache/
 # Environment
 .env
 .env.local
+CLAUDE.local.md
+.claude/settings.local.json
