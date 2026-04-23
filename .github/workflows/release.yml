@@ -32,7 +32,7 @@ jobs:
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "📦 Releasing version: $VERSION"
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Verify CHANGELOG has version
         run: |
@@ -86,7 +86,7 @@ jobs:
             ext: ""
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -150,7 +150,7 @@ jobs:
     needs: [verify, build]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Download all artifacts
         uses: actions/download-artifact@v4
