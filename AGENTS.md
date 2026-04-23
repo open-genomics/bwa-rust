@@ -44,6 +44,9 @@ openspec/specs/
 ├── alignment-algorithm/ # Algorithmic details
 ├── cli/                 # CLI interface spec
 ├── architecture/        # Architecture design
+├── ai-development-workflow/ # AI-assisted development workflow
+├── repository-governance/   # Repository structure and maintenance rules
+├── project-presentation/    # README, Pages, and GitHub metadata rules
 ├── testing/             # Testing strategy
 └── paired-end-alignment/ # PE alignment (planned)
 ```

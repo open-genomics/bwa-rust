@@ -14,6 +14,9 @@
   - `alignment-algorithm/`: 算法实现细节
   - `cli/`: CLI 接口规范
   - `architecture/`: 架构设计
+  - `ai-development-workflow/`: AI 辅助开发流程规范
+  - `repository-governance/`: 仓库治理与结构规范
+  - `project-presentation/`: README / Pages / GitHub 展示规范
   - `testing/`: 测试策略
 
 **OpenSpec 工作流**：
@@ -175,6 +178,9 @@ bwa-rust/
 │   │   ├── alignment-algorithm/ # 算法实现细节
 │   │   ├── cli/               # CLI 接口规范
 │   │   ├── architecture/      # 架构设计
+│   │   ├── ai-development-workflow/ # AI 辅助开发流程
+│   │   ├── repository-governance/   # 仓库治理
+│   │   ├── project-presentation/    # 项目对外展示规范
 │   │   └── testing/           # 测试策略
 │   ├── changes/         # 活动变更 (proposals, designs, tasks)
 │   └── config.yaml      # OpenSpec 配置
