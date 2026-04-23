@@ -9,6 +9,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### ✨ Added
+
+#### CLI Parameters
+
+- **New CLI options**: `--max-occ`, `--max-chains`, `--max-alignments` for both `align` and `mem` subcommands
+  - Previously these parameters were only configurable via `AlignOpt` struct
+  - Users can now tune memory/performance settings from command line
+
+#### Testing Infrastructure
+
+- **Real data test framework**: Added `tests/real_data.rs` with optional `real-data` feature
+  - Framework for comparing against BWA output
+  - Performance benchmarks for index building
+  - See `tests/data/README.md` for data acquisition instructions
+
+### 🔧 Changed
+
+#### Documentation
+
+- **Magic numbers documented**: Added documentation for `0.8` overlap threshold in `filter_chains`
+  - Explains the BWA empirical value and its trade-offs
+- **SA algorithm documented**: Added complexity analysis and future improvement notes
+- **FM index memory documented**: Added explanation for why `text` field is retained
+
+#### Dependencies
+
+- **Version pinning**: All dependencies now use specific versions for reproducibility
+  - `anyhow = "1.0.95"` (was `1.0`)
+  - `clap = "4.5.26"` (was `4.5`)
+  - `serde = "1.0.217"` (was `1.0`)
+  - etc.
+
 ## [0.2.0] - 2026-04-17
 
 ### 🌏 Documentation
@@ -124,7 +156,7 @@ New configurable limits to prevent memory explosion on repetitive sequences:
 - **Benchmarks**: Criterion performance tests
 - **CI/CD**: GitHub Actions (fmt → clippy → test → release build)
 - **Documentation**: Architecture docs, tutorial, example code
-- **Test Coverage**: 167 tests total (151 unit + 11 integration + 5 module tests)
+- **Test Coverage**: 201 tests total (188 unit + 11 integration + 2 other)
 
 ---
 

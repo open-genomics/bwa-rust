@@ -4,58 +4,35 @@
 
 | Version | Supported |
 | ------- | --------- |
-| 0.1.x   | ✅ Active development |
-| < 0.1   | ❌ Not supported |
+| 0.2.x   | ✅ Current |
+| < 0.2   | ❌ Not supported |
 
 ## Reporting a Vulnerability
 
-We take security seriously. If you discover a security vulnerability, please follow these steps:
+**Do NOT open a public issue for security vulnerabilities.**
 
-### 🔒 Private Reporting (Recommended)
-
-1. **Do NOT open a public issue**
-2. Use GitHub's private vulnerability reporting:
-   - Go to [Security Advisories](https://github.com/LessUp/bwa-rust/security/advisories/new)
-   - Click "Report a vulnerability"
-   - Fill in the vulnerability details
-3. Alternatively, email the maintainer directly (check commit history for email)
-4. Include:
-   - Description of the vulnerability
+1. Report privately via [Security Advisories](https://github.com/LessUp/bwa-rust/security/advisories/new)
+2. Include:
+   - Description and impact
    - Steps to reproduce
-   - Potential impact
    - Suggested fix (if any)
-   - Disclosure timeline preference
 
-### ⏱️ Response Timeline
+**Response timeline:**
+- Initial response: 48 hours
+- Confirmation: 7 days
+- Fix: Depends on severity
 
-| Stage | Timeline |
-|-------|----------|
-| Initial response | Within 48 hours |
-| Vulnerability confirmation | Within 7 days |
-| Fix development | Depends on severity |
-| Security advisory | After fix is released |
-
-### 🏆 Recognition
-
-Contributors who responsibly disclose security vulnerabilities will be:
-- Listed in the security advisory (if desired)
-- Credited in CHANGELOG.md (if desired)
+Contributors who responsibly disclose vulnerabilities will be credited in the security advisory and CHANGELOG (if desired).
 
 ## Security Best Practices
 
 When using bwa-rust:
-
-- **Input validation**: Always validate input FASTA/FASTQ files
+- **Input validation**: Validate input FASTA/FASTQ files
 - **Memory limits**: Use `--max-occ`, `--max-chains`, `--max-alignments` for untrusted input
-- **Resource limits**: Consider ulimit for processing untrusted data
+- **Resource limits**: Consider ulimit for untrusted data
 
-## Known Security Considerations
+## Security Considerations
 
-1. **Memory exhaustion**: Large or maliciously crafted input files can cause memory issues
-   - Mitigation: Use memory protection parameters
-
+1. **Memory exhaustion**: Large or malicious input can cause OOM → Use memory protection parameters
 2. **No network access**: bwa-rust does not make network connections
-   - Safe to run in isolated environments
-
-3. **No unsafe code**: Project forbids `unsafe` Rust code
-   - Memory safety guaranteed by Rust compiler
+3. **No unsafe code**: Project forbids `unsafe` Rust → Memory safety guaranteed by compiler

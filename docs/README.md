@@ -8,7 +8,7 @@
 
 | Document | Description | 中文 |
 |----------|-------------|------|
-| [Specifications](../specs/) | **Single Source of Truth** (SDD) | [规范](../specs/README.md) |
+| [Specifications](../openspec/specs/) | **Single Source of Truth** (OpenSpec workflow) | [规范](../openspec/specs/) |
 | [Getting Started](tutorial/getting-started.md) | Installation and basic usage | [快速入门](tutorial/getting-started.zh-CN.md) |
 | [Architecture](architecture/) | Module design and implementation | [架构](architecture/overview.zh-CN.md) |
 | [Algorithms](tutorial/algorithms.md) | Core algorithm tutorial | [算法教程](tutorial/algorithms.zh-CN.md) |

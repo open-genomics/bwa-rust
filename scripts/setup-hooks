@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# Setup git hooks for bwa-rust
+# Usage: ./scripts/setup-hooks
+
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+GIT_HOOKS_DIR="$(git rev-parse --git-dir)/hooks"
+
+echo "🔗 Setting up git hooks..."
+
+# Install pre-commit hook
+if [ -f "$SCRIPT_DIR/pre-commit" ]; then
+    ln -sf "../../scripts/pre-commit" "$GIT_HOOKS_DIR/pre-commit"
+    echo "✅ Installed pre-commit hook"
+else
+    echo "⚠️  pre-commit hook not found at $SCRIPT_DIR/pre-commit"
+fi
+
+echo ""
+echo "✅ Git hooks setup complete!"
+echo ""
+echo "To run checks manually:"
+echo "  ./scripts/pre-commit"
+echo ""
+echo "To skip hooks (use sparingly):"
+echo "  git commit --no-verify"

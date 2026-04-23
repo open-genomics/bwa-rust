@@ -4,28 +4,35 @@
 
 ---
 
-## 规范驱动开发 (SDD)
+## OpenSpec 工作流
 
-本项目严格遵循**规范驱动开发（Spec-Driven Development）**范式。
+本项目采用 **OpenSpec** 框架进行规范驱动开发。
 
-- **`/specs/product/`**: 产品功能定义与验收标准
-- **`/specs/rfc/`**: 技术设计文档与架构方案
-- **`/specs/api/`**: API 接口规范
-- **`/specs/testing/`**: BDD 测试用例规范
+- **`openspec/specs/`**: 规范文档（唯一事实来源）
+  - `alignment/`: 核心比对功能规范
+  - `index-building/`: FM 索引构建规范
+  - `alignment-algorithm/`: 算法实现细节
+  - `cli/`: CLI 接口规范
+  - `architecture/`: 架构设计
+  - `testing/`: 测试策略
 
-**工作流要求**：
-1. 新功能开发必须先更新 Spec 文档
-2. 代码实现必须 100% 遵守 Spec 定义
-3. 测试用例需覆盖 Spec 中的验收标准
+**OpenSpec 工作流**：
+1. 使用 `/opsx:propose <name>` 创建新变更提案
+2. 提案生成 `proposal.md`、`design.md`、`tasks.md` 等文件
+3. 使用 `/opsx:apply` 实施任务
+4. 实施完成后用 `/opsx:archive` 归档变更
+5. 代码实现必须 100% 遵守 `openspec/specs/` 中的规范
 
-### 如何参与编写 Spec
+**完整工作流说明：** 见 [docs/development/ai-workflow.md](docs/development/ai-workflow.md)
 
-1. **新功能**：在 `specs/product/` 创建或更新功能规范，定义验收标准
-2. **技术设计**：在 `specs/rfc/` 创建 RFC 文档，编号遵循 `NNNN-title.md` 格式
-3. **API 变更**：在 `specs/api/` 更新接口规范
-4. **测试规范**：在 `specs/testing/` 定义测试策略
+### 如何参与开发
 
-详见 [AGENTS.md](AGENTS.md) 中的 AI 工作流指令。
+1. **探索阶段**：使用 `/opsx:explore` 思考和调查问题
+2. **创建提案**：使用 `/opsx:propose <name>` 创建变更提案
+3. **实施变更**：使用 `/opsx:apply` 按任务列表实施代码
+4. **归档变更**：使用 `/opsx:archive` 完成后归档
+
+详见 [AGENTS.md](AGENTS.md) 中的 OpenSpec 工作流指令。
 
 ---
 
@@ -143,7 +150,7 @@ unsafe_code = "forbid"  # 全项目禁止 unsafe
 
 - 新功能必须附带单元测试
 - Bug 修复应包含回归测试
-- 当前测试覆盖：**168 项测试**（151 单元 + 11 集成 + 5 模块 + 1 文档）
+- 当前测试覆盖：**201 项测试**（188 单元 + 11 集成 + 2 文档）
 
 ```bash
 # 运行所有测试
@@ -162,11 +169,16 @@ cargo bench
 
 ```
 bwa-rust/
-├── specs/               # 规范文档 (Single Source of Truth)
-│   ├── product/         # 产品功能定义
-│   ├── rfc/             # 技术设计 RFC
-│   ├── api/             # API 接口规范
-│   └── testing/         # 测试策略
+├── openspec/            # OpenSpec 工作流
+│   ├── specs/           # 规范文档 (Single Source of Truth)
+│   │   ├── alignment/         # 核心比对功能规范
+│   │   ├── index-building/    # FM 索引构建规范
+│   │   ├── alignment-algorithm/ # 算法实现细节
+│   │   ├── cli/               # CLI 接口规范
+│   │   ├── architecture/      # 架构设计
+│   │   └── testing/           # 测试策略
+│   ├── changes/         # 活动变更 (proposals, designs, tasks)
+│   └── config.yaml      # OpenSpec 配置
 ├── docs/                # 用户文档与开发文档
 │   ├── tutorial/        # 教程
 │   ├── architecture/    # 架构说明
@@ -229,7 +241,8 @@ jobs:
 | [AGENTS.md](AGENTS.md) | AI 编程助手完整指南 |
 | [README.md](README.md) | 项目介绍（英文）|
 | [README.zh-CN.md](README.zh-CN.md) | 项目介绍（中文）|
-| [specs/](specs/) | **规范文档 (Single Source of Truth)** |
+| [openspec/specs/](openspec/specs/) | **规范文档 (Single Source of Truth)** |
+| [openspec/config.yaml](openspec/config.yaml) | OpenSpec 项目配置 |
 | [docs/](docs/) | 用户教程与架构文档 |
 | [ROADMAP.md](ROADMAP.md) | 开发路线图 |
 | [CHANGELOG.md](CHANGELOG.md) | 变更日志 |

@@ -15,8 +15,9 @@
 /docs/ @LessUp
 /site/ @LessUp
 
-# Specifications (critical - single source of truth)
-/specs/ @LessUp
+# OpenSpec specifications (critical - single source of truth)
+/openspec/specs/ @LessUp
+/openspec/changes/ @LessUp
 
 # Configuration files
 *.toml @LessUp

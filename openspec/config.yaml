@@ -1,0 +1,38 @@
+---
+schema: spec-driven
+
+context: |
+  Tech stack: Rust 2021 Edition (MSRV 1.70)
+  CLI framework: clap 4.5
+  Build system: Cargo
+  Testing: cargo test + criterion benchmarks
+  Package manager: Cargo
+
+  Project: BWA-MEM style DNA short-read aligner
+  Pipeline: FASTA/FASTQ → FM-index → SMEM seeds → chains → Smith-Waterman → SAM
+
+  Cross-platform requirements:
+  - Runs on Linux, macOS, Windows
+  - Use std::fs for file operations
+  - Non-Windows uses jemalloc allocator
+
+  Code style:
+  - No comments in code unless explicitly requested
+  - Max line width: 120 chars
+  - unsafe_code = "forbid" in Cargo.toml
+
+rules:
+  specs:
+    - Use bioinformatics domain terminology (read, contig, alignment, CIGAR, SAM)
+    - Include algorithmic complexity analysis (O(n), O(n log n), etc.)
+    - Specify memory constraints for genomic data (human genome ~3GB)
+    - Define acceptance criteria with concrete metrics
+  tasks:
+    - Run cargo fmt && cargo clippy && cargo test after code changes
+    - Update benchmarks for performance-related changes
+    - Maintain 188+ unit test count
+  design:
+    - Document algorithmic choices and trade-offs vs BWA-MEM
+    - Reference BWA-MEM behavior where applicable
+    - Explain memory optimization strategies
+    - Include code examples in Rust syntax

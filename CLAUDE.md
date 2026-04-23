@@ -4,18 +4,29 @@
 
 ---
 
-## Project Philosophy: Spec-Driven Development (SDD)
+## Project Philosophy: OpenSpec-Driven Development
 
-本项目严格遵循**规范驱动开发（Spec-Driven Development）**范式。所有的代码实现必须以 `/specs` 目录下的规范文档为唯一事实来源（Single Source of Truth）。
+本项目采用 **OpenSpec** 框架进行规范驱动开发。所有的代码实现必须以 `openspec/specs/` 目录下的规范文档为唯一事实来源（Single Source of Truth）。
+
+### OpenSpec Workflow
+
+使用 OpenSpec CLI 和 `/opsx` 命令管理变更：
+
+| 命令 | 说明 |
+|------|------|
+| `/opsx:propose <name>` | 创建新变更提案，生成 proposal.md, design.md, tasks.md |
+| `/opsx:apply` | 执行 tasks.md 中的实施任务 |
+| `/opsx:archive` | 归档已完成的变更到 `openspec/changes/archive/` |
+| `/opsx:explore` | 探索代码库，理解问题后再提案 |
 
 ### AI Agent Workflow
 
-1. **审查 Spec**: 在编写代码前，先阅读 `/specs` 下的相关文档
-2. **Spec 优先**: 新功能或接口变更必须先更新 Spec 文档
+1. **审查 Spec**: 在编写代码前，先阅读 `openspec/specs/` 下的相关文档
+2. **Propose First**: 新功能或接口变更必须先用 `/opsx:propose` 创建提案
 3. **遵守 Spec**: 代码实现必须 100% 遵守 Spec 定义
-4. **按 Spec 测试**: 测试用例需覆盖 Spec 中的所有验收标准
+4. **Archive**: 完成后用 `/opsx:archive` 归档变更
 
-> 详细工作流指令见 [AGENTS.md](AGENTS.md)
+> **必读**: [docs/development/ai-workflow.md](docs/development/ai-workflow.md) — 完整工作流程规范
 
 ---
 
@@ -37,10 +48,10 @@
 | 指标 | 状态 |
 |------|------|
 | 版本 | v0.2.0 |
-| 测试 | 151 单元 + 11 集成 + 5 模块测试 ✅ |
+| 测试 | 188 单元 + 11 集成 + 2 文档测试 ✅ |
 | CI | GitHub Actions (fmt → clippy → test → release) |
 | 文档 | 架构文档、教程、VitePress 站点 |
-| 规范 | `/specs/` 目录 (SDD 工作流) |
+| 规范 | `openspec/specs/` 目录 (OpenSpec 工作流) |
 
 ---
 
@@ -164,20 +175,23 @@ unsafe_code = "forbid"  # 全项目禁止 unsafe
 
 ```rust
 pub struct AlignOpt {
-    pub match_score: i32,               // 匹配得分
-    pub mismatch_penalty: i32,          // 错配罚分
-    pub gap_open: i32,                  // Gap 开启罚分
-    pub gap_extend: i32,                // Gap 扩展罚分
-    pub clip_penalty: i32,              // 软剪切惩罚（候选排序）
-    pub band_width: usize,              // 带状 SW 带宽
-    pub score_threshold: i32,           // 最低输出得分
-    pub min_seed_len: usize,            // 最小种子长度（默认 19）
-    pub threads: usize,                 // 线程数
-    pub max_chains_per_contig: usize,   // 每 contig 最大链数（默认 5）
-    pub max_alignments_per_read: usize, // 每 read 最大输出数（默认 5）
-    pub max_occ: usize,                 // 最大种子出现次数（默认 500）
+    pub match_score: i32,               // 匹配得分 (默认: 2)
+    pub mismatch_penalty: i32,          // 错配罚分 (默认: 1)
+    pub gap_open: i32,                  // Gap 开启罚分 (默认: 2)
+    pub gap_extend: i32,                // Gap 扩展罚分 (默认: 1)
+    pub clip_penalty: i32,              // 软剪切惩罚（候选排序）(默认: 1)
+    pub band_width: usize,              // 带状 SW 带宽 (默认: 16)
+    pub score_threshold: i32,           // 最低输出得分 (默认: 20)
+    pub min_seed_len: usize,            // 最小种子长度 (默认: 19)
+    pub threads: usize,                 // 线程数 (默认: 1)
+    pub max_chains_per_contig: usize,   // 每 contig 最大链数 (默认: 5)
+    pub max_alignments_per_read: usize, // 每 read 最大输出数 (默认: 5)
+    pub max_occ: usize,                 // 最大种子出现次数 (默认: 500)
+    pub zdrop: i32,                     // Z-drop 阈值 (默认: 100)
 }
 ```
+
+**真值来源**: `src/align/mod.rs` 中的 `AlignOpt::default()` 实现。
 
 `validate()` 方法校验所有参数的有效性。
 
@@ -243,10 +257,9 @@ jobs:
 
 | 类型 | 数量 | 位置 |
 |------|------|------|
-| 单元测试 | ~151 | 各模块 `#[cfg(test)]` |
+| 单元测试 | 188 | 各模块 `#[cfg(test)]` |
 | 集成测试 | 11 | `tests/integration.rs` |
-| 模块测试 | 5+ | `src/align/mod.rs` 等 |
-| 文档测试 | 1 | `src/lib.rs` |
+| 文档测试 | 2 | `src/lib.rs` 等 |
 
 ### 关键测试用例
 
@@ -296,7 +309,8 @@ cargo test align_opt_rejects_zero_band_width
 | [AGENTS.md](AGENTS.md) | AI 编程助手完整指南 |
 | [README.md](README.md) | 项目介绍（英文） |
 | [README.zh-CN.md](README.zh-CN.md) | 项目介绍（中文） |
-| [specs/](specs/) | **规范文档 (Single Source of Truth)** |
+| [openspec/specs/](openspec/specs/) | **规范文档 (Single Source of Truth)** |
+| [openspec/config.yaml](openspec/config.yaml) | OpenSpec 项目配置 |
 | [docs/](docs/) | 用户教程与架构文档 |
 | [ROADMAP.md](ROADMAP.md) | 开发路线图 |
 | [CHANGELOG.md](CHANGELOG.md) | 变更日志 |

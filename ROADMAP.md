@@ -53,34 +53,145 @@
 
 ---
 
+## v0.2.0 特性状态清单
+
+### 已实现核心功能（当前版本 v0.2.0）
+
+#### F-001: FM-Index Based Sequence Alignment ✅
+- ✅ Build FM-index from FASTA reference genome
+- ✅ Support single-end read alignment from FASTQ input
+- ✅ Output SAM format alignment results
+- ✅ Handle multi-contig reference genomes
+- ✅ Support reverse complement alignment
+
+#### F-002: SMEM Seed Finding ✅
+- ✅ Find longest exact match covering each read position
+- ✅ Support left extension until no longer maximal
+- ✅ Filter seeds with occurrence count exceeding max_occ (default: 500)
+
+#### F-003: Seed Chain Building ✅
+- ✅ DP-based chain scoring with gap penalties
+- ✅ Greedy peeling for multi-chain extraction
+- ✅ Filter low-score chains below threshold
+- ✅ Limit chains per contig (max_chains_per_contig, default: 5)
+
+#### F-004: Banded Smith-Waterman Alignment ✅
+- ✅ Banded SW with configurable band width (default: 16)
+- ✅ Affine gap penalty (gap open + gap extend)
+- ✅ Generate CIGAR string from alignment
+- ✅ Compute NM (edit distance) tag
+- ✅ Semi-global refinement for edge cases
+
+#### F-005: SAM Output ✅
+- ✅ Generate @HD header line (VN:1.6, SO:unsorted)
+- ✅ Generate @SQ header lines for each contig
+- ✅ Generate @PG header line with program info
+- ✅ Format alignment records with correct FLAG values
+- ✅ Include optional tags: AS:i, XS:i, NM:i
+
+#### F-006: Multi-Threading Support ✅
+- ✅ Configurable thread count via CLI (-t option)
+- ✅ Near-linear speedup on multi-core systems
+- ✅ Thread-safe data structures using rayon
+
+#### F-007: Memory Protection ✅
+- ✅ max_occ: Skip seeds with SA interval > threshold (default: 500)
+- ✅ max_chains_per_contig: Limit chains per contig (default: 5)
+- ✅ max_alignments_per_read: Limit output alignments (default: 5)
+
+#### F-008: MAPQ Estimation ✅
+- ✅ Score-difference based MAPQ model
+- ✅ Consider best vs second-best alignment score difference
+- ✅ Output MAPQ in SAM record (column 5)
+
+#### F-009: CLI Interface ✅
+- ✅ `index` subcommand: Build FM-index from FASTA
+- ✅ `align` subcommand: Align FASTQ reads to existing index
+- ✅ `mem` subcommand: One-step index + align (BWA-MEM style)
+- ✅ Support -o output option for file output
+- ✅ Support -t thread count option
+
+#### F-010: Input Validation ✅
+- ✅ Reject empty FASTA sequences
+- ✅ Reject duplicate contig names
+- ✅ Handle malformed FASTQ records
+- ✅ Validate thread count (must be > 0)
+- ✅ Handle various line endings (LF/CRLF)
+
+### 计划中的功能
+
+#### F-011: Paired-End Alignment (Planned)
+- ⏳ Support paired-end read alignment (v0.3.0)
+- ⏳ Insert size constraints
+- ⏳ Mate rescue for unpaired reads
+- ⏳ Proper pair flag marking
+- **Note**: Infrastructure exists in code but not exposed via CLI
+
+#### F-012: BAM Output (Planned)
+- ⏳ Support compressed BAM format output (v0.5.0)
+- ⏳ Coordinate-sorted output option
+
+#### F-013: BWA Native Index Compatibility (Future)
+- ⏳ Read BWA's .bwt/.sa/.pac index files directly
+
+## 非功能性需求
+
+### NFR-001: Memory Safety ✅
+- ✅ Zero `unsafe` code in the entire codebase
+- ✅ All memory safety guaranteed by Rust compiler
+- ✅ Enforced via `unsafe_code = "forbid"` lint
+
+### NFR-002: Performance Targets
+
+| Metric | Target | v0.2.0 Status |
+|--------|--------|---------------|
+| Index build (100M bp) | < 60s | ✅ Typical: ~40s |
+| Alignment (1K reads, 4 threads) | < 1s | ✅ Typical: ~0.6s |
+| Memory usage (human genome) | < 8 GB | ⚠️ Not yet tested on hg38 |
+| Multi-thread scaling | Near-linear up to 8 threads | ✅ Achieved |
+
+### NFR-003: Code Quality ✅
+- ✅ Pass `cargo fmt --all -- --check`
+- ✅ Pass `cargo clippy --all-targets --all-features -- -D warnings`
+- ✅ Pass `cargo test --all-targets --all-features`
+- ✅ MSRV: Rust 1.70
+- ✅ 201 tests (188 unit + 11 integration + 2 other)
+
+### NFR-004: Platform Support ✅
+- ✅ Linux (primary, CI-tested)
+- ✅ macOS (builds successfully)
+- ✅ Windows (builds successfully)
+
+---
+
 ## 未来规划
 
 以下版本按优先级排序，具体实现时间待定：
 
-### v0.2.0 — 配对端比对
+### v0.3.0 — 配对端比对
 
 | 功能 | 描述 |
 |------|------|
-| PE Reads | 配对端 FASTQ 输入 |
+| PE Reads | 配对端 FASTQ 输入（基础架构已存在） |
 | Insert Size | 插入片段长度估计 |
 | Mate Rescue | 配对挽救（单端未比对时） |
 | Proper Pair | 正确配对 FLAG 标记 |
 
-### v0.3.0 — 索引兼容
+### v0.4.0 — 索引兼容
 
 | 功能 | 描述 |
 |------|------|
 | BWA Index | 读取 BWA 原生索引文件 |
 | 格式支持 | `.bwt/.sa/.pac/.ann/.amb` |
 
-### v0.4.0 — 输出增强
+### v0.5.0 — 输出增强
 
 | 功能 | 描述 |
 |------|------|
 | BAM 输出 | 直接输出压缩格式 |
 | 排序输出 | 按 coordinate 排序 |
 
-### v0.5.0 — 性能飞跃
+### v0.6.0 — 性能飞跃
 
 | 功能 | 描述 |
 |------|------|
