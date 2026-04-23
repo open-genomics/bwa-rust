@@ -24,6 +24,13 @@ pub struct Contig {
 /// - 支持任意有限字母表，字母以 [0..sigma) 进行编码（0 预留为 $）。
 /// - 采用定长分块的 Occ 采样（块内顺扫补偿），便于后续替换为压缩结构。
 /// - 保存完整 SA（MVP），方便从区间获得位置；后续可替换为稀疏采样。
+///
+/// # 内存占用说明
+///
+/// `text` 字段保存原始文本，占用 O(n) 空间。这是必要的权衡：
+/// - 比对时需要参考序列进行 Smith-Waterman 扩展
+/// - 从 BWT 重建文本的开销远大于保存原始文本
+/// - 未来可考虑压缩存储或按需加载
 #[derive(Debug, Serialize, Deserialize)]
 pub struct FMIndex {
     pub magic: u64,
@@ -43,6 +50,10 @@ pub struct FMIndex {
     /// contig 元信息（名称、长度、起始偏移）
     pub contigs: Vec<Contig>,
     /// 原始文本（数值化字母表，包含 contig 间的 0 分隔符）
+    ///
+    /// # 用途
+    /// 比对时需要恢复参考序列进行 SW 扩展。虽然占用 O(n) 空间，
+    /// 但避免了从 BWT 重建的 O(n) 时间开销。
     pub text: Vec<u8>,
     /// 可选的构建元数据
     pub meta: Option<IndexMeta>,

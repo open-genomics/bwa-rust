@@ -77,6 +77,7 @@ fn e2e_seed_chain_align_exact() {
     // 链构建
     let mut chains = build_chains(&seeds, read.len());
     assert!(!chains.is_empty());
+    // 过滤弱链：保留得分 >= 最佳得分 * 0.3 的链
     filter_chains(&mut chains, 0.3);
     assert!(!chains.is_empty());
 
@@ -112,6 +113,7 @@ fn e2e_seed_chain_align_with_mismatch() {
     let seeds = find_smem_seeds(&fm, &alpha, 4);
     if !seeds.is_empty() {
         let mut chains = build_chains(&seeds, read.len());
+        // 过滤弱链：保留得分 >= 最佳得分 * 0.3 的链
         filter_chains(&mut chains, 0.3);
         if !chains.is_empty() {
             let ref_seq: Vec<u8> = fm.text[..fm.contigs[0].len as usize]

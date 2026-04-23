@@ -62,6 +62,8 @@ pub fn collect_candidates(
 
     // 构建多条链
     let mut chains = build_chains_with_limit(&seeds, len, opt.max_chains_per_contig);
+    // 过滤弱链：保留得分 >= 最佳得分 * 0.3 的链
+    // 0.3 阈值来自 BWA 经验值，平衡保留多比对和过滤噪声
     filter_chains(&mut chains, 0.3);
 
     let mut sw_buf = sw::SwBuffer::new();
