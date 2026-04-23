@@ -49,8 +49,8 @@ cargo build
 # 3. 运行测试
 cargo test
 
-# 4. 创建特性分支
-git checkout -b feature/your-feature
+# 4. 评估当前工作树状态（单人维护场景可直接在当前分支整理后推送）
+git status --short
 ```
 
 ---
@@ -78,21 +78,20 @@ git checkout -b feature/your-feature
 ### 🔧 提交代码
 
 ```bash
-# 1. 创建分支
-git checkout -b feature/your-feature
-
-# 2. 编写代码和测试
+# 1. 编写代码和测试
 cargo test
 
-# 3. 检查代码质量
+# 2. 检查代码质量
 cargo fmt --all
 cargo clippy --all-targets --all-features -- -D warnings
 
-# 4. 提交（遵循 Conventional Commits）
+# 3. 提交（遵循 Conventional Commits）
 git commit -m "feat: add your feature"
 
-# 5. 推送并创建 PR
-git push origin feature/your-feature
+# 4. 单人维护默认直接推送到 `master`
+git push origin master
+
+# 如需隔离高风险或并行工作，再临时创建分支/工作树
 ```
 
 ---
