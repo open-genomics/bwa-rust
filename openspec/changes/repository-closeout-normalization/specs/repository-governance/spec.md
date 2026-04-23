@@ -26,18 +26,18 @@ The repository SHALL maintain a single approved structure for specifications, im
 - **THEN** they SHALL remain ignored or session-local unless the project explicitly versions them as source material
 - **AND** closeout cleanup SHALL verify that such outputs are not part of the canonical repository topology
 
-### Requirement: Worktree and PR Discipline
-The repository SHALL use change-scoped branches and worktrees with explicit GitHub preflight checks before substantial work begins.
+### Requirement: Lightweight Git Hygiene
+The repository SHALL keep git workflow lightweight for a single-maintainer project while still making local state explicit before substantial changes.
 
 #### Scenario: Starting a scoped change
 - **WHEN** a developer or AI tool begins a new scoped cleanup or feature task
-- **THEN** the workflow SHALL check `gh` authentication, local git status, worktree state, and PR state before edits
-- **AND** the work SHALL proceed on a dedicated branch or worktree until it is merged or retired
+- **THEN** the workflow SHALL inspect local repository state before edits
+- **AND** direct push to the default branch SHALL be allowed once local validation passes
 
-#### Scenario: Detecting stale local or remote state
-- **WHEN** preflight finds stale worktrees, abandoned branches, or open PRs that conflict with the new task
-- **THEN** those conflicts SHALL be surfaced before continuing
-- **AND** the workflow SHALL require pruning, reuse, or explicit deferral instead of silently accumulating more drift
+#### Scenario: Using optional isolation
+- **WHEN** a change is risky, parallelized, or likely to benefit from isolation
+- **THEN** the workflow MAY use a temporary branch or worktree
+- **AND** that isolation SHALL remain optional rather than mandatory repository policy
 
 ### Requirement: Minimal Automation Surface
 The repository SHALL retain only automation that has a clear closeout or maintenance purpose.

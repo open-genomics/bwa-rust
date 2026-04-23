@@ -18,15 +18,13 @@ All code must follow `openspec/specs/` as the single source of truth.
 **REQUIRED: Read [docs/development/ai-workflow.md](docs/development/ai-workflow.md) before starting any work.**
 
 **Quick workflow reference**:
-1. **Preflight**: `gh pr list --state open && git worktree list` — Check for stale state
+1. **Assess local state**: `git status --short` — Know what is already dirty before editing
 2. **Propose**: `/opsx:propose <name>` — Generate proposal/design/tasks before coding
-3. **Worktree**: `git worktree add ../bwa-rust-<name> -b feature/<name>` — Isolate work
-4. **Implement**: `/opsx:apply` — Execute tasks from tasks.md
-5. **Validate**: `cargo fmt --all && cargo clippy && cargo test` — Ensure quality
-6. **PR**: `gh pr create --fill` — Submit for review
-7. **Merge**: `gh pr merge --squash` — Merge after approval
-8. **Cleanup**: Remove worktree, delete branch, pull main
-9. **Archive**: `/opsx:archive` — Move proposal to archive
+3. **Implement**: `/opsx:apply` — Execute tasks from tasks.md
+4. **Validate**: `cargo fmt --all && cargo clippy && cargo test` — Ensure quality
+5. **Push**: direct push to `master` is the default for this single-maintainer repo
+6. **Isolate only when needed**: use a branch/worktree for risky or parallel work, not by default
+7. **Archive**: `/opsx:archive` — Move proposal to archive after the change lands
 
 ### OpenSpec Commands
 

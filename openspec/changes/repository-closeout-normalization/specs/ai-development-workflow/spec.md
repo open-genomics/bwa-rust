@@ -13,16 +13,16 @@ The workflow SHALL assign clear roles to planning, implementation, and review to
 
 #### Scenario: Running a scoped change
 - **WHEN** a change spans planning, specification, implementation, and review
-- **THEN** OpenSpec SHALL define the contract, implementation agents SHALL follow the approved specs, and a review model or `/review` step SHALL run before merge
+- **THEN** OpenSpec SHALL define the contract, implementation agents SHALL follow the approved specs, and a review model or `/review` step SHALL be available for risky or high-impact changes
 - **AND** subagents SHALL be used only for naturally parallel audit, verification, or implementation slices
 
-### Requirement: Session Preflight for AI-Assisted Work
-AI-assisted development sessions SHALL begin with a lightweight repository health check.
+### Requirement: Lightweight Session Awareness
+AI-assisted development sessions SHALL make local repository state visible without requiring heavyweight GitHub-side preflight for every change.
 
 #### Scenario: Starting an AI session
 - **WHEN** Claude, Codex, Copilot, OpenCode, or another AI assistant is used for a repository change
-- **THEN** the workflow SHALL verify `gh` login, local modifications, worktree state, and open PR state before editing
-- **AND** the session SHALL surface any blocking state instead of silently proceeding
+- **THEN** the workflow SHALL surface local modifications and branch/worktree context when they materially affect the task
+- **AND** `gh` checks SHALL remain optional unless the change needs GitHub-side operations
 
 ### Requirement: Minimal Tooling Configuration
 The repository SHALL prefer a small, explicit tooling surface over broad generic integrations.

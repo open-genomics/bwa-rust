@@ -1,18 +1,18 @@
 # AI-Assisted Development Workflow
 
-> Canonical workflow for developing bwa-rust with OpenSpec, GitHub CLI, worktrees, and AI coding assistants.
+> Canonical workflow for developing bwa-rust with OpenSpec and AI coding assistants in a single-maintainer repo.
 
-This document defines the concrete, project-specific workflow for AI-assisted development on bwa-rust. It combines OpenSpec lifecycle management, git worktree discipline, GitHub CLI integration, and effective use of Claude/Codex/Copilot.
+This document defines the concrete, project-specific workflow for AI-assisted development on bwa-rust. The default path is simple: check local state, update OpenSpec when needed, implement, validate, and push directly to `master`. Branches, worktrees, PRs, and `gh`-driven review remain available as optional tools for risky or parallel work, not mandatory ceremony.
 
 ---
 
 ## Core Principles
 
-1. **One worktree per change** — Isolate work, avoid context switching
-2. **One branch per feature** — Clean PR history
-3. **OpenSpec as source of truth** — Specs before code
-4. **Preflight before work** — Check state before starting
-5. **PR merge discipline** — Review, test, merge, cleanup
+1. **Direct push by default** — Validate locally, then push to `master`
+2. **OpenSpec as source of truth** — Specs before code
+3. **Keep local state visible** — Know what is already dirty before editing
+4. **Use isolation only when it helps** — Branches/worktrees are optional tools
+5. **Review is selective** — Use `/review` or a review model for risky changes, not every typo fix
 6. **AI tool specialization** — Right tool for the job
 
 ---
@@ -21,39 +21,29 @@ This document defines the concrete, project-specific workflow for AI-assisted de
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│ 1. PREFLIGHT                                                     │
-│    gh pr list / git worktree list / git branch                   │
-│    → Check for stale state before starting                       │
+│ 1. LOCAL STATE CHECK                                             │
+│    git status / git branch --show-current                        │
+│    → Understand the current worktree before starting             │
 ├─────────────────────────────────────────────────────────────────┤
 │ 2. PROPOSE (OpenSpec)                                            │
 │    /opsx:propose <name>                                          │
 │    → Generate proposal.md, design.md, tasks.md                   │
 │    → Review and confirm before implementation                    │
 ├─────────────────────────────────────────────────────────────────┤
-│ 3. WORKTREE + BRANCH                                             │
-│    git worktree add ../bwa-rust-<change-name> -b <branch-name>  │
-│    → Isolate work, prevent default-branch contamination          │
+│ 3. IMPLEMENT                                                     │
+│    current worktree by default                                   │
+│    → use branch/worktree only for risky or parallel changes      │
 ├─────────────────────────────────────────────────────────────────┤
-│ 4. IMPLEMENT (OpenSpec Apply)                                    │
+│ 4. VALIDATE                                                      │
 │    /opsx:apply                                                   │
-│    → Execute tasks from tasks.md                                 │
-│    → Commit incrementally with meaningful messages               │
+│    + cargo fmt/clippy/test                                       │
+│    → land a clean, verified change                               │
 ├─────────────────────────────────────────────────────────────────┤
-│ 5. VALIDATE                                                      │
-│    cargo fmt --all && cargo clippy && cargo test                 │
-│    → Ensure code quality before pushing                          │
+│ 5. PUSH                                                          │
+│    git push origin master                                        │
+│    → direct push is the normal single-maintainer path            │
 ├─────────────────────────────────────────────────────────────────┤
-│ 6. REVIEW & PR                                                   │
-│    git push origin <branch-name>                                 │
-│    gh pr create --fill                                           │
-│    → Request review, address feedback                            │
-├─────────────────────────────────────────────────────────────────┤
-│ 7. MERGE & CLEANUP                                               │
-│    gh pr merge --squash / --rebase                               │
-│    git worktree remove ../bwa-rust-<change-name>                 │
-│    git branch -d <branch-name>                                   │
-├─────────────────────────────────────────────────────────────────┤
-│ 8. ARCHIVE (OpenSpec)                                            │
+│ 6. ARCHIVE (OpenSpec)                                            │
 │    /opsx:archive                                                 │
 │    → Move proposal/design/tasks to openspec/changes/archive/     │
 └─────────────────────────────────────────────────────────────────┘
@@ -61,34 +51,36 @@ This document defines the concrete, project-specific workflow for AI-assisted de
 
 ---
 
-## 1. Preflight Checklist
+## 1. Local State Check
 
-**Always run before starting new work:**
+**Recommended before starting new work:**
 
 ```bash
-# Check for open PRs
-gh pr list --state open
+# See what is already dirty
+git status --short
 
-# Check for stale worktrees
+# Confirm where you are working
+git branch --show-current
+
+# Only if you are already using worktrees
 git worktree list
+```
 
-# Check for unmerged branches
-git branch --no-merged master
+**Optional GitHub-side checks (only when needed):**
 
-# Check for uncommitted changes in the default-branch worktree
-git status
+```bash
+gh auth status
+gh pr list --state open
 ```
 
 **Red flags:**
-- Open PRs → Merge or close before starting new work
-- Stale worktrees → Remove with `git worktree remove <path>`
-- Unmerged branches → Investigate and clean up
-- Uncommitted changes in the default-branch worktree → Commit or stash
+- Unknown local modifications → Inspect them before editing
+- Stale worktrees you no longer need → Remove them
+- Open PRs only matter if you intentionally choose a branch/PR workflow for this change
 
-**Do NOT start new work if:**
-- You have open PRs awaiting review/merge
-- Previous worktrees exist but aren't actively being worked on
-- Main worktree has uncommitted changes
+**Do NOT start blind:**
+- If the current worktree is already dirty and you do not understand why
+- If an old worktree or branch will cause you to edit the wrong copy of the repo
 
 ---
 
@@ -134,7 +126,7 @@ Create a change proposal before implementing:
 **Review before proceeding:**
 - Does design align with `openspec/specs/`?
 - Are all stakeholders aligned?
-- Is scope reasonable for one PR?
+- Is scope reasonable for one landing unit?
 
 **Do NOT skip proposal for:**
 - New features
@@ -167,7 +159,7 @@ Execute tasks from the proposal:
 - Test incrementally
 - Commit logical units of work
 
-### 2.4 Archive Phase (After Merge)
+### 2.4 Archive Phase (After Landing the Change)
 
 Move completed change to archive:
 
@@ -182,20 +174,22 @@ openspec/changes/<change-name>/
 ```
 
 **When to archive:**
-- PR is merged to the default branch (`master`)
+- The change has landed on the default branch (`master`)
 - All tasks are complete
 - Change is no longer active
 
 **Do NOT archive if:**
-- PR is still open
+- An optional review branch or PR is still active
 - Follow-up work is planned
 - Change is blocked
 
 ---
 
-## 3. Worktree + Branch Management
+## 3. Optional Worktree + Branch Management
 
-### 3.1 Create Worktree
+Branches and worktrees are available when they make the change safer or easier to reason about. They are **not** the default requirement for this repository.
+
+### 3.1 Create Worktree (Optional)
 
 ```bash
 # From the default-branch worktree (e.g., /home/shane/dev/bwa-rust)
@@ -234,10 +228,10 @@ git push origin feature/<change-name>
 - Write clear commit messages
 - Reference issue/task numbers when applicable
 
-### 3.3 Remove Worktree After Merge
+### 3.3 Remove Worktree After Landing the Change
 
 ```bash
-# After PR is merged
+# After the change has landed
 cd /home/shane/dev/bwa-rust  # Back to the default-branch worktree
 git worktree remove ../bwa-rust-<change-name>
 git branch -d feature/<change-name>
@@ -248,13 +242,20 @@ git pull origin master  # Update the default branch
 - Worktree removed
 - Local branch deleted
 - Main branch updated
-- Remote branch deleted (GitHub does this automatically on merge)
+- Temporary branch deleted if you created one
 
 ---
 
-## 4. PR & Review Process
+## 4. Optional Review and Branch Workflow
 
-### 4.1 Create PR
+Direct push to `master` is the default path for this single-maintainer project once local validation passes.
+
+Use a branch + PR only when one of these is true:
+- the change is unusually risky
+- you want a GitHub review surface for a large diff
+- you are collaborating with someone else on the same change
+
+### 4.1 Create PR (Optional)
 
 ```bash
 # Push branch
@@ -332,10 +333,8 @@ gh pr merge --squash
 gh pr merge --rebase
 ```
 
-**Never merge locally** — Always use `gh pr merge` to ensure:
-- CI passes
-- Reviews are approved
-- Branch protection rules are satisfied
+**If you choose a PR flow**, `gh pr merge` keeps the GitHub-side history tidy.
+For the normal single-maintainer path, push directly to `master` after local validation passes.
 
 ---
 
@@ -377,7 +376,7 @@ git worktree remove ../bwa-rust-<abandoned-change> --force
 
 **Warning signs:**
 - Worktrees older than 2 weeks without commits
-- Branches with no associated PR
+- Temporary branches you no longer need
 - Multiple unmerged branches
 
 ---

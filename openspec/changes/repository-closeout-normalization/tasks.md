@@ -3,7 +3,7 @@
 - [x] 1.1 Audit all repo references to legacy `specs/` paths and classify each file as migrate, rewrite, archive, or delete.
 - [x] 1.2 Migrate any unique legacy spec content into `openspec/` artifacts and remove the retired `specs/` tree.
 - [x] 1.3 Update contributor, support, and AI-facing docs so `openspec/` is the only normative spec source.
-- [x] 1.4 Add a project-specific preflight workflow that checks `gh` auth, git status, worktree state, and PR state before scoped work begins.
+- [x] 1.4 Add a lightweight single-maintainer workflow that keeps local state visible without requiring PR/worktree ceremony for every change.
 
 **Status**: All legacy specs/ references rewritten, OpenSpec established as canonical, AI workflow documented.
 
@@ -44,7 +44,7 @@
 
 ### Stage 1: Version Control Hygiene (BLOCKING - must complete first)
 
-**Critical**: These untracked files must be committed before any merge/PR workflow.
+**Critical**: These untracked files must be committed before the normalization changes are pushed to `master`.
 
 #### Task 1.1: Track OpenSpec specifications
 ```bash
@@ -65,7 +65,7 @@ git add docs/development/ai-workflow.md docs/development/tooling.md
 git commit -m "docs: add AI-assisted development workflow
 
 Defines OpenSpec-driven workflow for Claude/Copilot/subagents with
-worktree/branch/PR discipline.
+single-maintainer direct-push defaults and optional isolation tools.
 
 Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>"
 ```
@@ -87,7 +87,7 @@ Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>"
 
 #### Task 1.4: Track engineering tooling
 ```bash
-git add scripts/pre-commit scripts/setup-hooks .tooling-surface-README.md .github/DEPLOY.md
+git add scripts/pre-commit scripts/setup-hooks .github/DEPLOY.md
 git commit -m "feat: add pre-commit hooks and tooling guidance
 
 Pre-commit hooks enforce fmt/clippy/test discipline.
@@ -96,7 +96,7 @@ Tooling surface documents editor/LSP/MCP decisions.
 Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>"
 ```
 
-**Verification**: `git ls-files scripts/ | grep -E '(pre-commit|setup-hooks)'` + check .tooling-surface-README.md
+**Verification**: `git ls-files scripts/ | grep -E '(pre-commit|setup-hooks)'`
 
 #### Task 1.5: Track test data and real_data integration test
 ```bash
@@ -123,9 +123,9 @@ Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>"
 
 **Verification**: `git ls-files .claude/` should show tracked files
 
-### Stage 2: Create Normalization PR (AFTER Stage 1)
+### Stage 2: Land Normalization Changes (AFTER Stage 1)
 
-**Goal**: Bundle all normalization changes into a single reviewable PR.
+**Goal**: Bundle all normalization changes into a clean direct-push sequence for the single-maintainer default workflow.
 
 #### Task 2.1: Review all staged changes
 ```bash
@@ -155,59 +155,14 @@ boundaries and minimal technical debt.
 Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>"
 ```
 
-#### Task 2.3: Create PR
+#### Task 2.3: Push directly to `master`
 ```bash
-# Assuming working on feature branch (if not, create one first)
-gh pr create \
-  --title "Repository normalization and closeout preparation" \
-  --body "## Overview
-
-This PR completes the repository normalization effort, establishing clean governance and preparing for archive-ready closeout.
-
-## Changes
-
-### Governance
-- ✅ Established \`openspec/\` as single source of truth
-- ✅ Removed legacy \`specs/\` tree
-- ✅ Updated all references to OpenSpec
-
-### Truth Reconciliation  
-- ✅ Clarified v0.2.0 = single-end only, PE support planned
-- ✅ Updated test baseline to 201 tests
-- ✅ Documented mem vs align default parameter rationale
-
-### Engineering Surface
-- ✅ Removed coverage/typos/funding workflows
-- ✅ Added pre-commit hooks (fmt/clippy/test)
-- ✅ Enhanced AI workflow docs at \`docs/development/ai-workflow.md\`
-- ✅ Added tooling guidance (\`.tooling-surface-README.md\`)
-
-### Public-Facing
-- ✅ Refreshed README for v0.2.0 accurate capability claims
-- ✅ Streamlined GitHub Pages site
-- ✅ Removed duplicate/stale content
-
-## Verification
-
-\`\`\`bash
-cargo fmt --all -- --check
-cargo clippy --all-targets --all-features -- -D warnings  
-cargo test
-cargo build --release
-\`\`\`
-
-All checks passing ✅
-
-## Post-Merge
-
-After merge, follow staged closeout in \`openspec/changes/repository-closeout-normalization/tasks.md\` Stage 3+." \
-  --label "refactor" \
-  --label "documentation"
+git push origin master
 ```
 
-**Verification**: `gh pr view` should show the created PR
+**Verification**: `git ls-remote --heads origin master` should include the new normalization commit
 
-#### Task 2.4: Pre-merge verification
+#### Task 2.4: Post-push verification
 ```bash
 # Run full quality suite one more time
 cargo fmt --all -- --check && \
@@ -215,11 +170,11 @@ cargo clippy --all-targets --all-features -- -D warnings && \
 cargo test
 ```
 
-**Expected**: All checks pass, ready for review/merge
+**Expected**: All checks pass, repository ready for archive-oriented closeout
 
-### Stage 3: Post-Merge Cleanups (AFTER Stage 2 merged)
+### Stage 3: Post-Landing Cleanups (AFTER Stage 2)
 
-These are optional polish tasks that can be done incrementally after the main normalization PR lands.
+These are optional polish tasks that can be done incrementally after the normalization changes land on `master`.
 
 #### Task 3.1: GitHub metadata alignment (optional)
 ```bash
@@ -263,7 +218,7 @@ See `.github/DEPLOY.md` for Pages deployment workflow.
 ### Git Discipline
 - All commits MUST include trailer: `Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>`
 - Stage 1 commits are individual focused commits
-- Stage 2 creates ONE big normalization commit + PR
+- Stage 2 lands the normalization update directly on `master`
 - Never commit with failing tests
 - Never force-push to main
 
