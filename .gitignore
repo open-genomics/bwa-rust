@@ -51,3 +51,7 @@ site/.vitepress/cache/
 .env.local
 CLAUDE.local.md
 .claude/settings.local.json
+
+# BMad Method V6
+_bmad/
+_bmad-output/
