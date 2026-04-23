@@ -138,6 +138,13 @@ pub fn build_chains_with_limit(seeds: &[MemSeed], max_gap: usize, max_chains_per
 /// 首先移除得分低于最佳链 `min_score_ratio` 倍的链；
 /// 然后在同一 contig 上，若两条链的 query 区间重叠率 > 80% 且 ref 区间重叠率 > 80%，
 /// 保留得分更高的链（即先出现的），丢弃另一条。
+///
+/// # 重叠阈值说明
+///
+/// `0.8` (80%) 重叠阈值来自 BWA 的经验值：
+/// - 两条链如果在 query 和 reference 上都有 >80% 重叠，很可能是同一比对的不同表示
+/// - 该阈值平衡了去重效果和保留真实多比对位点的能力
+/// - 过低会误删真实的多比对；过高会保留冗余候选
 pub fn filter_chains(chains: &mut Vec<Chain>, min_score_ratio: f64) {
     if chains.is_empty() {
         return;
@@ -152,6 +159,8 @@ pub fn filter_chains(chains: &mut Vec<Chain>, min_score_ratio: f64) {
     let ranges: Vec<ChainRanges> = chains.iter().map(ChainRanges::from_chain).collect();
 
     // 仅在同一 contig 且参考区间也高度重叠时，才视为冗余链
+    // OVERLAP_THRESHOLD = 0.8: 两条链在 query 和 ref 上重叠都超过 80% 视为冗余
+    const OVERLAP_THRESHOLD: f64 = 0.8;
     let mut keep = vec![true; chains.len()];
     for i in 0..chains.len() {
         if !keep[i] {
@@ -170,8 +179,8 @@ pub fn filter_chains(chains: &mut Vec<Chain>, min_score_ratio: f64) {
             }
             let rj = &ranges[j];
 
-            if overlap_ratio(ri.qb as u64, ri.qe as u64, rj.qb as u64, rj.qe as u64) > 0.8
-                && overlap_ratio(ri.rb as u64, ri.re as u64, rj.rb as u64, rj.re as u64) > 0.8
+            if overlap_ratio(ri.qb as u64, ri.qe as u64, rj.qb as u64, rj.qe as u64) > OVERLAP_THRESHOLD
+                && overlap_ratio(ri.rb as u64, ri.re as u64, rj.rb as u64, rj.re as u64) > OVERLAP_THRESHOLD
             {
                 keep[j] = false;
             }

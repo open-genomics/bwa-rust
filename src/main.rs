@@ -71,6 +71,15 @@ enum Commands {
         /// Number of threads
         #[arg(short = 't', long = "threads", value_parser = parse_threads, default_value_t = 1)]
         threads: usize,
+        /// Maximum occurrences for a MEM seed (skip highly repetitive seeds)
+        #[arg(long = "max-occ", default_value_t = 500)]
+        max_occ: usize,
+        /// Maximum chains to extract per contig
+        #[arg(long = "max-chains", default_value_t = 5)]
+        max_chains: usize,
+        /// Maximum alignments to output per read
+        #[arg(long = "max-alignments", default_value_t = 5)]
+        max_alignments: usize,
     },
     /// BWA-MEM style alignment: build index from FASTA and align FASTQ in one step
     Mem {
@@ -114,6 +123,15 @@ enum Commands {
         /// Number of threads
         #[arg(short = 't', long = "threads", value_parser = parse_threads, default_value_t = 1)]
         threads: usize,
+        /// Maximum occurrences for a MEM seed (skip highly repetitive seeds)
+        #[arg(long = "max-occ", default_value_t = 500)]
+        max_occ: usize,
+        /// Maximum chains to extract per contig
+        #[arg(long = "max-chains", default_value_t = 5)]
+        max_chains: usize,
+        /// Maximum alignments to output per read
+        #[arg(long = "max-alignments", default_value_t = 5)]
+        max_alignments: usize,
     },
 }
 
@@ -158,6 +176,9 @@ fn build_align_opt(
     min_seed_len: usize,
     zdrop: i32,
     threads: usize,
+    max_occ: usize,
+    max_chains: usize,
+    max_alignments: usize,
     preset: Option<&str>,
 ) -> align::AlignOpt {
     let mut opt = align::AlignOpt {
@@ -171,7 +192,9 @@ fn build_align_opt(
         min_seed_len,
         threads,
         zdrop,
-        ..align::AlignOpt::default()
+        max_occ,
+        max_chains_per_contig: max_chains,
+        max_alignments_per_read: max_alignments,
     };
 
     if let Some(p) = preset {
@@ -204,6 +227,9 @@ fn main() -> Result<()> {
             zdrop,
             preset,
             threads,
+            max_occ,
+            max_chains,
+            max_alignments,
         } => {
             let opt = build_align_opt(
                 match_score,
@@ -216,6 +242,9 @@ fn main() -> Result<()> {
                 min_seed_len,
                 zdrop,
                 threads,
+                max_occ,
+                max_chains,
+                max_alignments,
                 preset.as_deref(),
             );
             run_align(&index, &reads, out.as_deref(), opt)
@@ -235,6 +264,9 @@ fn main() -> Result<()> {
             zdrop,
             preset,
             threads,
+            max_occ,
+            max_chains,
+            max_alignments,
         } => {
             let opt = build_align_opt(
                 match_score,
@@ -247,6 +279,9 @@ fn main() -> Result<()> {
                 min_seed_len,
                 zdrop,
                 threads,
+                max_occ,
+                max_chains,
+                max_alignments,
                 preset.as_deref(),
             );
             run_mem(&reference, &reads, out.as_deref(), opt)
