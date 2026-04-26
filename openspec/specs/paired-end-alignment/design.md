@@ -23,7 +23,7 @@ Paired-end (PE) alignment extends the single-end alignment pipeline to handle ma
 
 Use median and MAD (Median Absolute Deviation) instead of mean and standard deviation.
 
-**Rationale:** Robust to outliers from chimeric reads and mis-mapped pairs. MAD-based thresholds are more reliable for genomic data.
+**Rationale:** Robust to outliers from chimeric reads and incorrectly mapped pairs. MAD-based thresholds are more reliable for genomic data.
 
 ```rust
 // MAD calculation

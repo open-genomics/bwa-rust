@@ -28,6 +28,7 @@ flate2 = "flate2"  # Rust crate for gzip compression
 samse = "samse"  # BWA subcommand for single-end SAM output
 sampe = "sampe"  # BWA subcommand for paired-end SAM output
 SME = "SME"  # Part of SMEM (Super-Maximal Exact Matches)
+PN = "PN"  # SAM @PG program name tag
 
 [type.rs]
 # Rust 特定配置
