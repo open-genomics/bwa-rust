@@ -365,7 +365,7 @@ cargo build --release
    ```bash
    # VSCode
    Cmd+Shift+P → "rust-analyzer: Restart Server"
-   
+
    # Or delete cache
    rm -rf target/debug/.fingerprint
    ```

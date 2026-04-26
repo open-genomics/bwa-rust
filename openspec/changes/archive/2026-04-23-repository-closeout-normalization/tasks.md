@@ -209,7 +209,7 @@ See `.github/DEPLOY.md` for Pages deployment workflow.
 - [ ] Verify each step's success before proceeding
 - [ ] If command fails, STOP and report (do not guess fixes)
 
-### Post-Task Checklist  
+### Post-Task Checklist
 - [ ] Run verification command shown in task
 - [ ] Run quality suite: `cargo fmt --all -- --check && cargo clippy --all-targets --all-features -- -D warnings && cargo test`
 - [ ] Check git status: `git status --short`
