@@ -1,4 +1,6 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use std::hint::black_box;
+
+use criterion::{criterion_group, criterion_main, Criterion};
 
 use bwa_rust::align::{self, SwParams};
 use bwa_rust::index::{bwt, fm, sa};
