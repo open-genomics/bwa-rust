@@ -20,7 +20,7 @@ clap = { version = "4.5.26", features = ["derive"] }
 serde = { version = "1.0.217", features = ["derive"] }
 bincode = "1.3.3"
 chrono = "0.4.39"
-rayon = "1.10.0"
+rayon = "1.12.0"
 
 # jemalloc：替换默认 allocator，补回 musl malloc 性能差距，多线程场景显著提升
 # 仅在非 Windows 平台启用（Linux glibc/musl + macOS）
