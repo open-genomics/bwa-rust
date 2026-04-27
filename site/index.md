@@ -120,8 +120,9 @@ bwa-rust mem ref.fa reads.fq -t 8 -o output.sam
 
 | 版本 | v0.2.0 |
 |------|--------|
-| 单元测试 | 151 个 ✅ |
+| 单元测试 | 188 个 ✅ |
 | 集成测试 | 11 个 ✅ |
+| 文档测试 | 2 个 ✅ |
 | CI/CD | GitHub Actions ✅ |
 | 文档 | 架构文档、规范文档、VitePress 站点 |
 | 配对端支持 | 🚧 v0.3.0 计划中 |
