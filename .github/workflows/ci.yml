@@ -142,7 +142,7 @@ jobs:
           ls -lh target/release/bwa-rust || echo "Binary not found"
 
       - name: Upload binary
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: bwa-rust-linux-debug
           path: target/release/bwa-rust
