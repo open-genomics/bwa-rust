@@ -36,7 +36,7 @@ jobs:
           fetch-depth: 0  # Required for lastUpdated feature
           persist-credentials: false  # 安全增强
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: 22
           cache: npm
