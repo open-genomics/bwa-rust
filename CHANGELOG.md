@@ -9,6 +9,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 🧹 Repository Cleanup
+
+#### Directory Structure
+- **Removed BMAD framework residues**: Deleted `_bmad/` and `_bmad-output/` directories
+- **Removed empty directories**: Cleaned up `docs/assets/`
+
+#### Skills Optimization
+- **Pruned skills directory**: Reduced from 2.3MB (50+ skills) to 84KB (6 core skills)
+  - Retained: `benchmark`, `verify`, `openspec-*` (project-specific)
+  - Removed: All BMAD generic templates
+
+### 🔒 Security & CI/CD
+
+#### Configuration
+- **Added `deny.toml`**: cargo-deny configuration for dependency security and license checks
+- **Added PR template**: `.github/PULL_REQUEST_TEMPLATE.md` for structured code review
+
+#### GitHub Repository
+- **Updated description**: Clear, emoji-enhanced project description
+- **Added topics**: rust, bioinformatics, dna-alignment, bwa-mem, fm-index, genomics, sequencing, smith-waterman
+
 ### ✨ Added
 
 #### CLI Parameters
