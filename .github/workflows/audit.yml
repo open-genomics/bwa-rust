@@ -15,6 +15,7 @@ env:
 permissions:
   contents: read
   issues: write  # 用于创建安全问题报告
+  checks: write  # 用于创建 check run
 
 concurrency:
   group: audit-${{ github.workflow }}-${{ github.ref }}
