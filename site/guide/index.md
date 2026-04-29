@@ -1,42 +1,37 @@
 # 使用指南
 
-欢迎来到 bwa-rust 使用指南。
+本指南只覆盖已交付的单端流程：FASTA 参考序列、FASTQ reads、`.fm` 索引和 SAM 输出。
 
-## 指南目录
-
-| 章节 | 说明 |
-|------|------|
-| [安装](installation) | 系统要求、构建步骤、预编译二进制 |
-| [快速开始](quickstart) | 基础用法、CLI 参数详解、功能概览 |
-
-## 快速导航
-
-### 新用户
-
-1. [安装](installation) — 确保系统满足要求并完成安装
-2. [快速开始](quickstart) — 学习基础用法和常用参数
-
-### 开发者
-
-- [架构文档](../architecture/) — 了解内部实现和算法
-- [API 文档](https://docs.rs/bwa-rust) — 查看 Rust API 参考
-- [GitHub](https://github.com/LessUp/bwa-rust) — 源码和 Issue
-
-## 命令速查
+## 标准路径
 
 ```bash
-# 构建索引
 bwa-rust index reference.fa -o ref
-
-# 比对序列（使用索引）
 bwa-rust align -i ref.fm reads.fq -o output.sam
-
-# 一步比对（BWA-MEM 风格）
-bwa-rust mem reference.fa reads.fq -t 8 -o output.sam
 ```
 
-## 系统要求
+也可以用 `mem` 在内存中构建索引并立即比对：
 
-- **Rust**: 1.70+ (MSRV)
-- **平台**: Linux / macOS / Windows
-- **内存**: 建议 8GB+（人类基因组索引构建）
+```bash
+bwa-rust mem reference.fa reads.fq -t 4 -o output.sam
+```
+
+## 参数真值
+
+CLI 默认值与 `src/align/mod.rs` 的 `AlignOpt::default()` 保持一致。常用参数：
+
+| 参数 | 默认值 | CLI |
+|------|--------|-----|
+| match score | `2` | `--match` / `-A` |
+| mismatch penalty | `1` | `--mismatch` / `-B` |
+| gap open | `2` | `--gap-open` / `-O` |
+| gap extend | `1` | `--gap-ext` / `-E` |
+| band width | `16` | `--band-width` / `-w` |
+| score threshold | `20` | `--score-threshold` / `-T` |
+| min seed length | `19` | `--min-seed-len` / `-k` |
+| z-drop | `100` | `--z-drop` / `-d` |
+
+## 下一步
+
+- [安装](/guide/installation)
+- [快速开始](/guide/quickstart)
+- [比对流水线](/architecture/pipeline)

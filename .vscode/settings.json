@@ -1,77 +1,39 @@
 {
-  // Rust-specific settings
   "rust-analyzer.check.command": "clippy",
   "rust-analyzer.check.allTargets": true,
-  "rust-analyzer.check.extraArgs": [
-    "--all-features",
-    "--",
-    "-D",
-    "warnings"
-  ],
+  "rust-analyzer.check.extraArgs": ["--all-features", "--", "-D", "warnings"],
   "rust-analyzer.cargo.features": "all",
-  "rust-analyzer.inlayHints.chainingHints.enable": true,
-  "rust-analyzer.inlayHints.parameterHints.enable": true,
-  "rust-analyzer.lens.enable": true,
-  "rust-analyzer.lens.implementations.enable": true,
-  "rust-analyzer.lens.references.adt.enable": true,
-  "rust-analyzer.lens.references.enumVariant.enable": true,
-  "rust-analyzer.lens.references.method.enable": true,
-  "rust-analyzer.lens.references.trait.enable": true,
-  
-  // Format on save
   "editor.formatOnSave": true,
-  "editor.formatOnSaveMode": "file",
+  "editor.rulers": [120],
   "[rust]": {
     "editor.defaultFormatter": "rust-lang.rust-analyzer",
     "editor.formatOnSave": true
   },
-  
-  // TOML formatting
   "[toml]": {
     "editor.defaultFormatter": "tamasfe.even-better-toml",
     "editor.formatOnSave": true
   },
-  
-  // YAML settings
   "[yaml]": {
     "editor.insertSpaces": true,
-    "editor.tabSize": 2,
-    "editor.autoIndent": "advanced"
+    "editor.tabSize": 2
   },
-  
-  // Markdown settings
   "[markdown]": {
-    "editor.wordWrap": "on",
-    "editor.quickSuggestions": {
-      "comments": false,
-      "strings": false,
-      "other": false
-    }
+    "editor.wordWrap": "on"
   },
-  
-  // File associations
   "files.associations": {
-    "*.rs": "rust",
     "Cargo.lock": "toml",
     "rust-toolchain.toml": "toml"
   },
-  
-  // Workspace-specific
   "files.exclude": {
     "**/target": true,
     "**/node_modules": true,
     "**/.git": true
   },
-  
-  // Line length matching rustfmt
-  "editor.rulers": [120],
-  
-  // Copilot settings for this project
   "github.copilot.enable": {
     "*": true,
-    "yaml": true,
     "markdown": true,
     "rust": true,
-    "toml": true
+    "toml": true,
+    "yaml": true
   }
 }

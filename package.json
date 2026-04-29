@@ -1,7 +1,7 @@
 {
   "private": true,
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=22.0.0"
   },
   "scripts": {
     "docs:dev": "vitepress dev site",
@@ -9,8 +9,6 @@
     "docs:preview": "vitepress preview site"
   },
   "devDependencies": {
-    "@vite-pwa/vitepress": "^1.1.0",
-    "sitemap-ts": "^1.10.1",
     "vitepress": "^1.6.4"
   }
 }

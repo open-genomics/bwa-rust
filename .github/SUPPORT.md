@@ -1,39 +1,23 @@
 # Support
 
-## 📖 Documentation
+## Documentation
 
-- [Online Docs](https://lessup.github.io/bwa-rust/)
-- [Architecture](https://github.com/LessUp/bwa-rust/tree/main/docs/architecture)
-- [Tutorial](https://github.com/LessUp/bwa-rust/tree/main/docs/tutorial)
-- [OpenSpec Specifications](https://github.com/LessUp/bwa-rust/tree/main/openspec/specs)
+- Public docs: <https://lessup.github.io/bwa-rust/>
+- Repository README: <https://github.com/LessUp/bwa-rust>
+- OpenSpec requirements: <https://github.com/LessUp/bwa-rust/tree/master/openspec/specs>
 
-## 💬 Community
+## Questions And Bugs
 
-- **Questions**: [GitHub Discussions](https://github.com/LessUp/bwa-rust/discussions)
-- **Bug Reports**: Use [Bug Report template](https://github.com/LessUp/bwa-rust/issues/new?template=bug_report.md)
-- **Feature Requests**: Use [Feature Request template](https://github.com/LessUp/bwa-rust/issues/new?template=feature_request.md)
+- Questions: GitHub Discussions.
+- Bugs: GitHub Issues with input files, command, expected behavior, actual behavior, OS, and Rust version.
+- Feature requests: label planned capabilities clearly; paired-end and BAM/CRAM are not shipped yet.
 
-## 🔒 Security
+## Security
 
-For security vulnerabilities, **do not** open a public issue.
+Do not open public issues for vulnerabilities. Use GitHub Security Advisories and see `SECURITY.md`.
 
-Report privately via [Security Advisories](https://github.com/LessUp/bwa-rust/security/advisories). See [SECURITY.md](SECURITY.md) for details.
+## Common Issues
 
-## 🛠️ Common Issues
-
-**Build failures on jemalloc**: jemalloc is disabled on Windows. On Linux/macOS, ensure build tools are installed.
-
-**FASTA parse errors**: Check file format, sequence names, and for duplicate contig names.
-
-**Memory issues**: Use memory protection parameters:
-```bash
-bwa-rust mem ref.fa reads.fq --max-occ 200 --max-chains 3 --max-alignments 3
-```
-
-## 📋 Contributing
-
-See [CONTRIBUTING.md](../CONTRIBUTING.md).
-
----
-
-**Note**: This is an open-source project maintained in spare time. Please be patient.
+- BWA index files are not compatible; build `.fm` with `bwa-rust index`.
+- This is single-end only; paired FASTQ input is not a shipped CLI workflow.
+- Use `--max-occ`, `--max-chains`, and `--max-alignments` to reduce repetitive-sequence blowups.

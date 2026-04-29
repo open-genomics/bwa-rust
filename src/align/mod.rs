@@ -10,7 +10,7 @@ pub mod sw;
 
 pub use candidate::{collect_candidates, dedup_candidates, AlignCandidate};
 pub use chain::{best_chain, build_chains, build_chains_with_limit, filter_chains, Chain};
-pub use extend::{chain_to_alignment, chain_to_alignment_buf, ChainAlignResult};
+pub use extend::{chain_to_alignment, chain_to_alignment_buf, chain_to_alignment_with_zdrop, ChainAlignResult};
 pub use mapq::compute_mapq;
 pub use pipeline::{align_fastq_with_fm_opt, align_fastq_with_opt};
 pub use seed::{find_mem_seeds, find_smem_seeds, find_smem_seeds_with_max_occ, AlnReg, MemSeed};

@@ -255,37 +255,21 @@ pub(crate) fn align_single_read(fm: &FMIndex, rec: &FastqRecord, sw_params: SwPa
         // Generate SA:Z tag for supplementary alignments
         let sa_tag = generate_sa_tag(idx, &all_candidates, &classification);
 
-        let sam_line = if md_tag.is_empty() {
-            sam::format_record(
-                qname,
-                flag,
-                &cand.rname,
-                cand.pos1,
-                mapq,
-                &cand.cigar,
-                out_seq,
-                out_qual,
-                cand.score,
-                sub_score,
-                cand.nm,
-            )
-        } else {
-            sam::format_record_with_md_sa(
-                qname,
-                flag,
-                &cand.rname,
-                cand.pos1,
-                mapq,
-                &cand.cigar,
-                out_seq,
-                out_qual,
-                cand.score,
-                sub_score,
-                cand.nm,
-                &md_tag,
-                &sa_tag,
-            )
-        };
+        let sam_line = sam::format_record_with_optional_tags(
+            qname,
+            flag,
+            &cand.rname,
+            cand.pos1,
+            mapq,
+            &cand.cigar,
+            out_seq,
+            out_qual,
+            cand.score,
+            sub_score,
+            cand.nm,
+            &md_tag,
+            &sa_tag,
+        );
         sam_lines.push(sam_line);
 
         // 限制输出的比对数量

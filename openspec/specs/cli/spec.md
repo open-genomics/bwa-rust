@@ -2,218 +2,147 @@
 
 ## Purpose
 
-The CLI provides command-line interface for bwa-rust with index building and alignment commands following BWA-MEM conventions.
+Define the shipped command-line interface for bwa-rust: index construction, single-end alignment against an existing index, and one-step in-memory `mem` alignment.
 
 ## Requirements
 
 ### Requirement: Index Command
 
-The system SHALL provide an `index` subcommand for building FM-index.
+The system SHALL provide an `index` subcommand for building a single-file FM-index from FASTA.
 
 #### Scenario: Build index from FASTA
 
-- **WHEN** user runs `bwa-rust index <ref.fa> -o <prefix>`
-- **THEN** build FM-index from reference FASTA
-- **AND** output `<prefix>.fm` file
+- **WHEN** a user runs `bwa-rust index <ref.fa> -o <prefix>`
+- **THEN** the CLI SHALL build an FM-index from the reference FASTA
+- **AND** write `<prefix>.fm`
 
-#### Scenario: Validate input file
+#### Scenario: Reject invalid reference input
 
-- **WHEN** invalid or non-existent FASTA is provided
-- **THEN** return error with descriptive message
-- **AND** exit with code 1
+- **WHEN** the FASTA path is missing, malformed, empty, or contains duplicate contig names
+- **THEN** the CLI SHALL return a descriptive error
+- **AND** exit unsuccessfully
 
 ### Requirement: Align Command
 
-The system SHALL provide an `align` subcommand for aligning reads to existing index.
+The system SHALL provide an `align` subcommand for aligning single-end FASTQ reads to an existing `.fm` index.
 
-#### Scenario: Align FASTQ to index
+#### Scenario: Align FASTQ to existing index
 
-- **WHEN** user runs `bwa-rust align -i <index.fm> <reads.fq>`
-- **THEN** align reads to pre-built index
-- **AND** output SAM to stdout
+- **WHEN** a user runs `bwa-rust align -i <index.fm> <reads.fq>`
+- **THEN** the CLI SHALL load the pre-built index
+- **AND** output SAM records to stdout unless `-o/--out` is provided
+
+#### Scenario: Configure output file
+
+- **WHEN** `-o/--out <path>` is specified
+- **THEN** the CLI SHALL write SAM output to that path
 
 #### Scenario: Configure threading
 
-- **WHEN** `-t` option is specified
-- **THEN** use specified thread count
-- **AND** default to single thread if not specified
-
-#### Scenario: Output to file
-
-- **WHEN** `-o` option is specified
-- **THEN** write SAM to specified file
-- **AND** create parent directories if needed
+- **WHEN** `-t/--threads <n>` is specified with `n >= 1`
+- **THEN** the CLI SHALL use that thread count for read-level parallelism
+- **AND** reject `0` as invalid
 
 ### Requirement: Mem Command
 
-The system SHALL provide a `mem` subcommand for one-step index and align (BWA-MEM style).
+The system SHALL provide a `mem` subcommand for building an index in memory and aligning single-end FASTQ reads in one command.
 
 #### Scenario: One-step alignment
 
-- **WHEN** user runs `bwa-rust mem <ref.fa> <reads.fq>`
-- **THEN** build index if not exists
-- **AND** align reads to index
-- **AND** output SAM to stdout
+- **WHEN** a user runs `bwa-rust mem <ref.fa> <reads.fq>`
+- **THEN** the CLI SHALL build an FM-index from the FASTA reference in memory
+- **AND** align the reads
+- **AND** output SAM records to stdout unless `-o/--out` is provided
 
-#### Scenario: Reuse existing index
+#### Scenario: Scope remains single-end
 
-- **WHEN** index file already exists
-- **THEN** skip index building
-- **AND** use existing index
+- **WHEN** a user needs paired-end alignment or BAM/CRAM output
+- **THEN** the CLI SHALL NOT present those workflows as shipped `mem` behavior
+- **AND** public documentation SHALL label them as planned until implemented
 
-### Requirement: Intentional Default Parameter Difference
+### Requirement: CLI Defaults Mirror Library Defaults
 
-The system SHALL use different default scoring parameters for `align` vs `mem` commands to reflect their different use cases.
+The CLI SHALL use `AlignOpt::default()` as the single source of truth for ordinary alignment defaults in both `align` and `mem`.
 
-**Rationale**: The `align` command is optimized for fast exact/near-exact matching against pre-built indexes (e.g., quality control, known reference scenarios), while `mem` follows BWA-MEM conventions for general-purpose alignment with greater tolerance for mismatches and gaps.
+#### Scenario: Running align without tuning flags
 
-#### Scenario: Align command defaults (fast exact matching)
+- **WHEN** a user runs `bwa-rust align` without scoring, band, seed, occurrence, chain, alignment-count, thread, or zdrop overrides
+- **THEN** the constructed alignment options SHALL match `AlignOpt::default()` for those fields
 
-- **WHEN** user runs `bwa-rust align` without explicit parameters
-- **THEN** use `AlignOpt::default()` values:
-  - `match_score: 2`, `mismatch_penalty: 1`
-  - `gap_open: 2`, `gap_extend: 1`
-  - `band_width: 16`, `score_threshold: 20`
-- **AND** prioritize speed and exact matches
-- **EFFECT**: Lower band width (16) and higher threshold (20) favor exact/near-exact alignments
+#### Scenario: Running mem without tuning flags
 
-#### Scenario: Mem command defaults (BWA-MEM compatibility)
-
-- **WHEN** user runs `bwa-rust mem` without explicit parameters
-- **THEN** use BWA-MEM-like values:
-  - `match_score: 1`, `mismatch_penalty: 4`
-  - `gap_open: 6`, `gap_extend: 1`
-  - `band_width: 100`, `score_threshold: 10`
-- **AND** tolerate more divergence from reference
-- **EFFECT**: Higher band width (100) and lower threshold (10) allow more distant matches typical in real sequencing data
-
-**Note**: Both commands accept explicit parameter overrides via CLI options. This difference is intentional and should NOT be considered drift or inconsistency.
+- **WHEN** a user runs `bwa-rust mem` without scoring, band, seed, occurrence, chain, alignment-count, thread, or zdrop overrides
+- **THEN** the constructed alignment options SHALL match `AlignOpt::default()` for those fields
+- **AND** named presets SHALL be the only documented mechanism that changes multiple defaults at once
 
 ### Requirement: Alignment Parameters
 
-The system SHALL support configuration of alignment parameters via CLI options.
+The system SHALL expose alignment tuning parameters consistently across `align` and `mem`.
 
-#### Scenario: Configure memory limits
+#### Scenario: Configure scoring and extension
 
-- **WHEN** user specifies `--max-occ`
-- **THEN** filter seeds with occurrence above threshold
-- **AND** default to 500 if not specified
+- **WHEN** a user specifies match, mismatch, gap, clip penalty, band width, score threshold, seed length, or zdrop options
+- **THEN** the CLI SHALL pass those values into `AlignOpt`
+- **AND** the alignment implementation SHALL use the configured values
 
-#### Scenario: Configure chain limits
+#### Scenario: Configure memory and output limits
 
-- **WHEN** user specifies `--max-chains`
-- **THEN** limit chains per contig
-- **AND** default to 5 if not specified
-
-#### Scenario: Configure output limits
-
-- **WHEN** user specifies `--max-alignments`
-- **THEN** limit alignments per read
-- **AND** default to 5 if not specified
+- **WHEN** a user specifies `--max-occ`, `--max-chains`, or `--max-alignments`
+- **THEN** the CLI SHALL use those values for repetitive seed filtering, chain extraction, and per-read output limiting
 
 ### Requirement: SAM Output Format
 
-The system SHALL output valid SAM format with complete headers and records.
+The system SHALL output valid SAM with headers and required alignment fields.
 
 #### Scenario: Generate SAM header
 
 - **WHEN** outputting SAM
-- **THEN** include @HD line with VN:1.6 and SO:unsorted
-- **AND** include @SQ lines for each contig
-- **AND** include @PG line with program info
+- **THEN** the output SHALL include `@HD`, one `@SQ` per contig, and `@PG`
 
-#### Scenario: Format alignment record
+#### Scenario: Format mapped alignment record
 
-- **WHEN** outputting alignment record
-- **THEN** include all 11 required fields
-- **AND** include AS:i, XS:i, NM:i tags
+- **WHEN** a read has a valid alignment
+- **THEN** the SAM record SHALL include all 11 required fields
+- **AND** include `AS:i`, `XS:i`, `NM:i`, and available `MD:Z`/`SA:Z` tags
 
-#### Scenario: Handle unmapped reads
+#### Scenario: Format unmapped read
 
-- **WHEN** read has no valid alignment
-- **THEN** output unmapped record with FLAG 4
-- **AND** set RNAME and POS to *
+- **WHEN** no candidate passes the score threshold
+- **THEN** the output SHALL be an unmapped SAM record with FLAG `4`, RNAME `*`, and POS `0`
 
 ### Requirement: Error Handling
 
-The system SHALL provide clear error messages for common issues.
-
-#### Scenario: Report invalid FASTA
-
-- **WHEN** FASTA parsing fails
-- **THEN** report file path and specific error
-- **AND** exit with code 1
+The system SHALL provide clear CLI errors for common user failures.
 
 #### Scenario: Report invalid index
 
-- **WHEN** index file is corrupted or wrong version
-- **THEN** report specific validation failure
-- **AND** suggest rebuilding index
+- **WHEN** an index file is corrupted, unsupported, or has the wrong magic/version
+- **THEN** the CLI SHALL report the validation failure
+- **AND** suggest rebuilding the index where applicable
 
 #### Scenario: Report I/O errors
 
-- **WHEN** file read/write fails
-- **THEN** report path and system error
-- **AND** suggest checking permissions/disk space
-
-## Why
-
-A familiar CLI interface following BWA-MEM conventions makes bwa-rust easy to adopt for existing bioinformatics workflows while providing Rust-specific safety guarantees.
+- **WHEN** file read or write fails
+- **THEN** the CLI SHALL report the path and underlying system error
 
 ## Reference: Default Parameter Values
 
-### Align Command Defaults
+Both `align` and `mem` use `AlignOpt::default()` unless explicitly overridden or changed by a named preset.
 
-The `align` command uses `AlignOpt::default()` values, optimized for fast exact matching:
+| Parameter | Default Value |
+|-----------|---------------|
+| `match_score` | 2 |
+| `mismatch_penalty` | 1 |
+| `gap_open` | 2 |
+| `gap_extend` | 1 |
+| `clip_penalty` | 1 |
+| `band_width` | 16 |
+| `score_threshold` | 20 |
+| `min_seed_len` | 19 |
+| `threads` | 1 |
+| `max_occ` | 500 |
+| `max_chains_per_contig` | 5 |
+| `max_alignments_per_read` | 5 |
+| `zdrop` | 100 |
 
-| Parameter | Default Value | Description |
-|-----------|---------------|-------------|
-| `match_score` | 2 | Score for matching bases |
-| `mismatch_penalty` | 1 | Penalty for mismatches |
-| `gap_open` | 2 | Gap opening penalty |
-| `gap_extend` | 1 | Gap extension penalty |
-| `clip_penalty` | 1 | Penalty for soft-clipped bases (candidate sorting) |
-| `band_width` | 16 | Smith-Waterman band width |
-| `score_threshold` | 20 | Minimum alignment score for output |
-| `min_seed_len` | 19 | Minimum SMEM seed length |
-| `zdrop` | 100 | Z-drop threshold for early termination |
-
-**Source of Truth**: `src/align/mod.rs` `AlignOpt::default()` implementation.
-
-### Mem Command Defaults
-
-The `mem` command uses BWA-MEM-compatible values for general-purpose alignment:
-
-| Parameter | Default Value | Description |
-|-----------|---------------|-------------|
-| `match_score` | 1 | Score for matching bases (BWA-MEM: 1) |
-| `mismatch_penalty` | 4 | Penalty for mismatches (BWA-MEM: 4) |
-| `gap_open` | 6 | Gap opening penalty (BWA-MEM: 6) |
-| `gap_extend` | 1 | Gap extension penalty (BWA-MEM: 1) |
-| `clip_penalty` | 1 | Penalty for soft-clipped bases |
-| `band_width` | 100 | Smith-Waterman band width (BWA-MEM: 100) |
-| `score_threshold` | 10 | Minimum alignment score for output (lowered for real data) |
-| `min_seed_len` | 19 | Minimum SMEM seed length (BWA-MEM: 19) |
-| `zdrop` | 100 | Z-drop threshold for early termination |
-
-**Source of Truth**: `src/main.rs` `Mem` command struct default annotations.
-
-### Note on Parameter Overrides
-
-Both commands accept explicit parameter overrides via CLI options (e.g., `--match`, `--mismatch`, `--band-width`). The different defaults reflect intentional design choices for different use cases and should NOT be considered drift or inconsistency.
-
-### Requirement: Truthful CLI Documentation
-
-The system SHALL ensure that published CLI documentation, examples, and feature descriptions match the shipped CLI surface exactly.
-
-#### Scenario: Publishing a command example
-
-- **WHEN** README, Pages, support docs, or release notes publish a CLI example
-- **THEN** the example SHALL use only currently supported subcommands, arguments, and invocation shapes
-- **AND** the example SHALL NOT imply support for planned features that are not yet shipped
-
-#### Scenario: Publishing CLI defaults or feature claims
-
-- **WHEN** a public document describes CLI defaults, command behavior, or supported read modes
-- **THEN** the document SHALL match the canonical CLI spec and current implementation at merge time
-- **AND** unsupported workflows such as planned paired-end entry points SHALL be labeled as planned rather than standard usage
+Source of truth: `src/align/mod.rs` `AlignOpt::default()`.

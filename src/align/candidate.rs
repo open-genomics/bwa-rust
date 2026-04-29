@@ -4,7 +4,7 @@ use crate::index::fm::Contig;
 use crate::index::fm::FMIndex;
 use crate::util::dna;
 
-use super::extend::chain_to_alignment_buf;
+use super::extend::chain_to_alignment_buf_with_zdrop;
 use super::extend::ChainAlignResult;
 use super::seed::find_smem_seeds_with_max_occ;
 use super::sw;
@@ -85,7 +85,8 @@ pub fn collect_candidates(
             continue;
         }
 
-        let approx = chain_to_alignment_buf(ch, query_norm, ref_seq.as_slice(), sw_params, &mut sw_buf);
+        let approx =
+            chain_to_alignment_buf_with_zdrop(ch, query_norm, ref_seq.as_slice(), sw_params, opt.zdrop, &mut sw_buf);
         let refined = refine_candidate_alignment(ch, query_norm, ref_seq.as_slice(), sw_params, &mut refine_buf);
         let (ref_offset, selected) = choose_alignment(approx, refined, opt.clip_penalty);
 
@@ -189,9 +190,9 @@ fn build_candidate(
         Vec::new()
     };
 
-    // Extract the aligned query segment
-    let query_segment = if res.query_start + res.query_end <= query_norm.len() {
-        query_norm[res.query_start..res.query_end].to_vec()
+    let query_len = cigar_query_length(&res.cigar);
+    let query_segment = if query_len <= query_norm.len() {
+        query_norm[..query_len].to_vec()
     } else {
         Vec::new()
     };
@@ -231,6 +232,16 @@ fn cigar_ref_length(cigar: &str) -> usize {
         .into_iter()
         .filter_map(|(op, len)| match op {
             'M' | '=' | 'X' | 'D' | 'N' => Some(len),
+            _ => None,
+        })
+        .sum()
+}
+
+fn cigar_query_length(cigar: &str) -> usize {
+    sw::parse_cigar(cigar)
+        .into_iter()
+        .filter_map(|(op, len)| match op {
+            'M' | '=' | 'X' | 'I' | 'S' => Some(len),
             _ => None,
         })
         .sum()
@@ -455,5 +466,31 @@ mod tests {
     fn effective_score_penalizes_soft_clipping() {
         assert_eq!(effective_score(16, "5S16M", 1), 11);
         assert_eq!(effective_score(13, "4M1I16M", 1), 13);
+    }
+
+    #[test]
+    fn build_candidate_keeps_full_query_for_soft_clipped_md_tag() {
+        let contig = Contig {
+            name: "chr1".to_string(),
+            len: 4,
+            offset: 0,
+        };
+        let res = ChainAlignResult {
+            score: 8,
+            cigar: "2S4M2S".to_string(),
+            nm: 0,
+            query_start: 2,
+            query_end: 6,
+            ref_start: 0,
+            ref_end: 4,
+        };
+
+        let cand = build_candidate(&contig, 0, false, &res, 0, 1, b"ACGT", b"NNACGTNN", 8);
+
+        assert_eq!(cand.query_seq, b"NNACGTNN");
+        assert_eq!(
+            crate::io::sam::generate_md_tag(&cand.ref_seq, &cand.query_seq, &cand.cigar),
+            "4"
+        );
     }
 }

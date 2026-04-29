@@ -2,32 +2,27 @@ name: Security Audit
 
 on:
   schedule:
-    - cron: '0 0 * * 1'  # 每周一 UTC 00:00 运行
+    - cron: '0 0 * * 1'
   push:
     paths:
       - '**/Cargo.toml'
       - '**/Cargo.lock'
-  workflow_dispatch:  # 支持手动触发
-
-env:
-  CARGO_TERM_COLOR: always
+      - '.github/workflows/audit.yml'
+  workflow_dispatch:
 
 permissions:
   contents: read
-  issues: write  # 用于创建安全问题报告
-  checks: write  # 用于创建 check run
 
 concurrency:
-  group: audit-${{ github.workflow }}-${{ github.ref }}
+  group: audit-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   audit:
-    name: Cargo Audit
+    name: Cargo audit
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v6
+      - uses: actions/checkout@v6
 
       - name: Run cargo audit
         uses: rustsec/audit-check@v2.0.0

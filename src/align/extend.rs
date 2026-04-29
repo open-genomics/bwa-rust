@@ -23,7 +23,17 @@ pub struct ChainAlignResult {
 /// 链内 gap 用 `global_align`），最终拼接 CIGAR 并在两端补软裁剪（`S`）。
 /// 使用预分配的 `SwBuffer` 避免热路径内存分配。
 pub fn chain_to_alignment(chain: &Chain, query: &[u8], reference: &[u8], p: SwParams) -> ChainAlignResult {
-    chain_to_alignment_buf(chain, query, reference, p, &mut SwBuffer::new())
+    chain_to_alignment_with_zdrop(chain, query, reference, p, 100)
+}
+
+pub fn chain_to_alignment_with_zdrop(
+    chain: &Chain,
+    query: &[u8],
+    reference: &[u8],
+    p: SwParams,
+    zdrop: i32,
+) -> ChainAlignResult {
+    chain_to_alignment_buf_with_zdrop(chain, query, reference, p, zdrop, &mut SwBuffer::new())
 }
 
 /// 同 [`chain_to_alignment`]，但接受外部 `SwBuffer` 以供跨调用复用，减少内存分配。
@@ -32,6 +42,17 @@ pub fn chain_to_alignment_buf(
     query: &[u8],
     reference: &[u8],
     p: SwParams,
+    buf: &mut SwBuffer,
+) -> ChainAlignResult {
+    chain_to_alignment_buf_with_zdrop(chain, query, reference, p, 100, buf)
+}
+
+pub fn chain_to_alignment_buf_with_zdrop(
+    chain: &Chain,
+    query: &[u8],
+    reference: &[u8],
+    p: SwParams,
+    zdrop: i32,
     buf: &mut SwBuffer,
 ) -> ChainAlignResult {
     if chain.seeds.is_empty() {
@@ -52,8 +73,6 @@ pub fn chain_to_alignment_buf(
     let mut ops: Vec<(char, usize)> = Vec::new();
     let mut total_score: i32 = 0;
     let mut total_nm: u32 = 0;
-    let zdrop = 100;
-
     let first_seed = &seeds[0];
     let last_seed = &seeds[seeds.len() - 1];
 
@@ -344,6 +363,36 @@ mod tests {
         let reference = b"ACGT";
         let res = chain_to_alignment(&chain, query, reference, p);
         assert!(res.cigar.contains('S'));
+    }
+
+    #[test]
+    fn chain_to_alignment_with_zdrop_limits_right_extension() {
+        let p = SwParams {
+            match_score: 2,
+            mismatch_penalty: 1,
+            gap_open: 2,
+            gap_extend: 1,
+            band_width: 8,
+        };
+        let chain = Chain {
+            contig: 0,
+            seeds: vec![MemSeed {
+                contig: 0,
+                qb: 0,
+                qe: 4,
+                rb: 0,
+                re: 4,
+            }],
+            score: 4,
+        };
+        let query = b"TTTTAAAACCCCAAAA";
+        let reference = b"TTTTAAAAGGGGAAAA";
+
+        let strict = chain_to_alignment_with_zdrop(&chain, query, reference, p, 3);
+        let loose = chain_to_alignment_with_zdrop(&chain, query, reference, p, 100);
+
+        assert!(strict.query_end < loose.query_end);
+        assert!(loose.cigar.starts_with("16M"));
     }
 
     #[test]

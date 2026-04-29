@@ -93,6 +93,33 @@ pub fn format_record_with_md_sa(
     }
 }
 
+pub fn format_record_with_optional_tags(
+    qname: &str,
+    flag: u16,
+    rname: &str,
+    pos: u32,
+    mapq: u8,
+    cigar: &str,
+    seq: &str,
+    qual: &str,
+    score: i32,
+    sub_score: i32,
+    nm: u32,
+    md_tag: &str,
+    sa_tag: &str,
+) -> String {
+    let mut line = format_record(qname, flag, rname, pos, mapq, cigar, seq, qual, score, sub_score, nm);
+    if !md_tag.is_empty() {
+        line.push_str("\tMD:Z:");
+        line.push_str(md_tag);
+    }
+    if !sa_tag.is_empty() {
+        line.push_str("\tSA:Z:");
+        line.push_str(sa_tag);
+    }
+    line
+}
+
 /// Generate MD:Z tag from reference and query sequences aligned according to CIGAR.
 ///
 /// The MD:Z tag encodes the reference sequence at mismatch positions for variant calling.
@@ -405,6 +432,27 @@ mod tests {
         assert!(line.contains("MD:Z:50"));
         assert!(line.contains("SA:Z:chr2,200,+,50M,60,0;"));
         assert!(line.contains("AS:i:100"));
+    }
+
+    #[test]
+    fn format_record_with_sa_without_md_tag() {
+        let line = format_record_with_optional_tags(
+            "read1",
+            0,
+            "chr1",
+            100,
+            60,
+            "50M",
+            "ACGT",
+            "IIII",
+            100,
+            0,
+            2,
+            "",
+            "chr2,200,+,50M,60,0;",
+        );
+        assert!(line.contains("SA:Z:chr2,200,+,50M,60,0;"));
+        assert!(!line.contains("MD:Z:"));
     }
 
     #[test]

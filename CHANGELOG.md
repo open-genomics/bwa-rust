@@ -1,233 +1,56 @@
 # Changelog
 
-All notable changes to this project will be documented in this file.
-
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-
----
+All notable changes to bwa-rust are recorded here.
 
 ## [Unreleased]
 
-### 🧹 Repository Cleanup
+### Fixed
 
-#### Directory Structure
-- **Removed BMAD framework residues**: Deleted `_bmad/` and `_bmad-output/` directories
-- **Removed empty directories**: Cleaned up `docs/assets/`
+- Threaded configured `zdrop` through chain extension instead of using a hard-coded extension threshold.
+- Preserved correct query coordinate space for MD:Z generation on soft-clipped alignments.
+- Allowed SA:Z tags to be emitted even when MD:Z data is unavailable for a candidate.
+- Normalized `mem` subcommand defaults to match `AlignOpt::default()`.
 
-#### Skills Optimization
-- **Pruned skills directory**: Reduced from 2.3MB (50+ skills) to 84KB (6 core skills)
-  - Retained: `benchmark`, `verify`, `openspec-*` (project-specific)
-  - Removed: All BMAD generic templates
+### Changed
 
-### 🔒 Security & CI/CD
-
-#### Configuration
-- **Added `deny.toml`**: cargo-deny configuration for dependency security and license checks
-- **Added PR template**: `.github/PULL_REQUEST_TEMPLATE.md` for structured code review
-
-#### GitHub Repository
-- **Updated description**: Clear, emoji-enhanced project description
-- **Added topics**: rust, bioinformatics, dna-alignment, bwa-mem, fm-index, genomics, sequencing, smith-waterman
-
-### ✨ Added
-
-#### CLI Parameters
-
-- **New CLI options**: `--max-occ`, `--max-chains`, `--max-alignments` for both `align` and `mem` subcommands
-  - Previously these parameters were only configurable via `AlignOpt` struct
-  - Users can now tune memory/performance settings from command line
-
-#### Testing Infrastructure
-
-- **Real data test framework**: Added `tests/real_data.rs` with optional `real-data` feature
-  - Framework for comparing against BWA output
-  - Performance benchmarks for index building
-  - See `tests/data/README.md` for data acquisition instructions
-
-### 🔧 Changed
-
-#### Documentation
-
-- **Magic numbers documented**: Added documentation for `0.8` overlap threshold in `filter_chains`
-  - Explains the BWA empirical value and its trade-offs
-- **SA algorithm documented**: Added complexity analysis and future improvement notes
-- **FM index memory documented**: Added explanation for why `text` field is retained
-
-#### Dependencies
-
-- **Version pinning**: All dependencies now use specific versions for reproducibility
-  - `anyhow = "1.0.95"` (was `1.0`)
-  - `clap = "4.5.26"` (was `4.5`)
-  - `serde = "1.0.217"` (was `1.0`)
-  - etc.
+- Rebuilt README and GitHub Pages around a single shipped/planned capability matrix.
+- Reduced `docs/` to internal development/tooling guidance; public user docs now live under `site/`.
+- Simplified GitHub Actions to least-privilege CI, Pages, release, and audit workflows.
+- Removed disabled/noisy Dependabot, scheduled benchmark, link-check issue creation, and unused PWA/analytics/sitemap scaffolding.
+- Rewrote AI guidance for OpenCode, Claude, and Copilot to be short and project-specific.
 
 ## [0.2.0] - 2026-04-17
 
-### 🌏 Documentation
+### Added
 
-#### Bilingual Documentation Suite
+- Configurable memory-protection knobs: `max_occ`, `max_chains_per_contig`, and `max_alignments_per_read`.
+- CLI flags `--max-occ`, `--max-chains`, and `--max-alignments` for `align` and `mem`.
+- Real-data test scaffold behind the optional `real-data` feature.
 
-- **Complete documentation overhaul** with full Chinese (中文) and English support
-- **Architecture Documentation**:
-  - [Architecture Overview](docs/architecture/overview.md) / [中文](docs/architecture/overview.zh-CN.md)
-  - [Index Building](docs/architecture/index-building.md) / [中文](docs/architecture/index-building.zh-CN.md)
-  - [Alignment Algorithms](docs/architecture/alignment.md) / [中文](docs/architecture/alignment.zh-CN.md)
-- **Tutorial Documentation**:
-  - [Getting Started](docs/tutorial/getting-started.md) / [中文](docs/tutorial/getting-started.zh-CN.md)
-  - [Algorithm Tutorial](docs/tutorial/algorithms.md) / [中文](docs/tutorial/algorithms.zh-CN.md)
-- **API Documentation**:
-  - [Library Usage](docs/api/library-usage.md) / [中文](docs/api/library-usage.zh-CN.md)
-- [Documentation Index](docs/README.md) with cross-language navigation
+### Fixed
 
-### ✨ Added
+- Strong reverse-complement candidates are sorted before score threshold filtering.
+- Semi-global refinement improves mismatch/indel CIGAR and NM accuracy.
+- Single-base insertion/deletion cases emit real `I`/`D` CIGAR operations.
+- FASTA/FASTQ validation reports clearer errors for malformed input.
+- Thread-pool construction errors are propagated instead of unwrapped.
 
-#### Memory Protection Configuration
+### Changed
 
-New configurable limits to prevent memory explosion on repetitive sequences:
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `max_occ` | 500 | Skip seeds with more occurrences |
-| `max_chains_per_contig` | 5 | Limit chains extracted per contig |
-| `max_alignments_per_read` | 5 | Limit output alignments per read |
-
-- Added `AlignOpt::validate()` method for comprehensive parameter validation
-
-### 🐛 Fixed
-
-#### Alignment Quality
-
-- **Candidate Filtering**: Fixed premature threshold filtering before sorting forward/reverse candidates
-  - Strong reverse hits are no longer incorrectly marked as unmapped
-- **Semi-global Refinement**: Added refinement for chain candidates
-  - Improves mismatch/indel CIGAR and NM tag accuracy
-  - Insertion/deletion reads now output real `I/D` CIGAR instead of fake full-length `M`
-- **Clip Penalty**: Introduced clip penalty for candidate ranking
-  - Prevents free soft-clips from masking single-base indels
-
-#### Input Validation
-
-- FASTA header without sequence name now raises clear error
-- Empty sequences rejected during index build
-- Duplicate contig names rejected during index build
-- `--threads 0` now errors at CLI level instead of silent fallback
-
-#### Error Handling
-
-- Replaced double `unwrap` with proper error propagation in rayon thread pool
-- Thread pool construction failures now return clear error messages
-
-### 🔧 Changed
-
-#### Code Quality
-
-- Extracted named constants, eliminated magic numbers:
-  - `MAX_ALIGNMENTS_PER_READ`, `MAX_CHAINS_PER_CONTIG`, `EXTEND_REF_PAD`, `DEFAULT_MAX_OCC`
-- Added `Copy` trait to `MemSeed`, removed unnecessary clones
-- Replaced `.cloned()` with `.copied()` for `Copy` types
-- Removed `from_utf8_lossy(...).into_owned()` in hot paths
-
-#### Documentation
-
-- Added comprehensive doc comments to public APIs:
-  - `chain.rs`, `candidate.rs`, `extend.rs`, `sw.rs`, `seed.rs`, `dna.rs`
-- Added `parse_cigar` boundary behavior tests
-
-### ⚡ Performance
-
-- Optimized read/qual and reverse-complement string construction paths
-
----
+- Added clip-penalty-aware candidate ranking.
+- Improved hot-path allocation behavior for read/quality and reverse-complement output.
+- Expanded tests to 188 unit tests and 11 integration tests.
 
 ## [0.1.0] - 2026-02-13
 
-### ✨ Added
+### Added
 
-#### Index Building (`index` subcommand)
-
-| Feature | Description |
-|---------|-------------|
-| FASTA Parser | Multi-contig support, various line endings, non-standard character filtering |
-| Suffix Array | Doubling algorithm, O(n log²n) complexity |
-| BWT Construction | Built from suffix array |
-| FM Index | C table + block-based Occ sampling + sparse SA sampling |
-| Serialization | Single `.fm` file with magic number, version, and build metadata |
-
-#### Sequence Alignment (`align` subcommand)
-
-| Feature | Description |
-|---------|-------------|
-| SMEM Seeding | Super-Maximal Exact Match seed finding |
-| Seed Chaining | DP-based chain scoring + greedy peeling + filtering |
-| Smith-Waterman | Banded affine-gap local alignment with CIGAR generation |
-| Bidirectional | Forward and reverse-complement alignment |
-| Candidate Management | Multi-chain deduplication, primary/secondary output |
-| MAPQ Estimation | Based on primary/secondary score difference |
-| SAM Output | Full header, CIGAR, MAPQ, AS/XS/NM tags |
-| Multi-threading | Parallel processing via rayon (`--threads`) |
-
-#### One-Step Alignment (`mem` subcommand)
-
-- BWA-MEM style one-command workflow
-- BWA-MEM default scoring: match=1, mismatch=4, gap-open=6, gap-ext=1
-
-#### Engineering
-
-- **Benchmarks**: Criterion performance tests
-- **CI/CD**: GitHub Actions (fmt → clippy → test → release build)
-- **Documentation**: Architecture docs, tutorial, example code
-- **Test Coverage**: 201 tests total (188 unit + 11 integration + 2 other)
-
----
-
-## Version History
-
-| Version | Date | Highlights |
-|---------|------|------------|
-| [0.2.0] | 2026-04-16 | Bilingual documentation, alignment quality improvements, memory protection |
-| [0.1.0] | 2026-02-13 | Initial release: FM index, SMEM seeding, banded SW, SAM output, multi-threading |
-
----
-
-## Migration Guide
-
-### From v0.1.0 to v0.2.0
-
-**No breaking changes**. All new features are backward compatible:
-
-- New `AlignOpt` fields have sensible defaults
-- Existing CLI commands work unchanged
-- `.fm` index format unchanged (version 2)
-
-### New CLI Options (v0.2.0)
-
-```bash
-# Limit repetitive seeds (default: 500)
-bwa-rust align -i ref.fm reads.fq --max-occ 200
-
-# Limit chains per contig (default: 5)
-bwa-rust mem ref.fa reads.fq --max-chains 3
-
-# Limit output alignments per read (default: 5)
-bwa-rust mem ref.fa reads.fq --max-alignments 10
-```
-
----
-
-## Release Checklist
-
-Before each release, ensure:
-
-- [ ] `cargo fmt --all -- --check` passes
-- [ ] `cargo clippy --all-targets --all-features -- -D warnings` passes
-- [ ] `cargo test --all-targets --all-features` passes
-- [ ] `cargo build --release` succeeds
-- [ ] CHANGELOG.md updated with release date
-- [ ] Version bumped in Cargo.toml
-- [ ] Git tag created: `v{version}`
-
----
+- FASTA parsing and FM-index construction.
+- Suffix array, BWT, C table, Occ sampling, sparse SA support, and `.fm` serialization.
+- FASTQ single-end alignment through SMEM seeding, chain construction, banded Smith-Waterman, MAPQ, and SAM output.
+- `index`, `align`, and `mem` CLI commands.
+- Rayon read-level parallelism.
+- Criterion benchmarks and GitHub Actions CI.
 
 [unreleased]: https://github.com/LessUp/bwa-rust/compare/v0.2.0...HEAD
 [0.2.0]: https://github.com/LessUp/bwa-rust/compare/v0.1.0...v0.2.0
