@@ -15,6 +15,10 @@ export default withMermaid(defineConfig({
   cleanUrls: true,
   lastUpdated: true,
 
+  sitemap: {
+    hostname: 'https://lessup.github.io/bwa-rust/'
+  },
+
   head: [
     ['meta', { name: 'theme-color', content: '#6d4aff' }],
     ['meta', { name: 'viewport', content: 'width=device-width, initial-scale=1.0' }],
@@ -41,10 +45,10 @@ export default withMermaid(defineConfig({
       themeConfig: {
         nav: [
           { text: '首页', link: '/zh/' },
-          { text: '指南', link: '/zh/guide/', activeMatch: '/zh/guide/' },
           { text: '架构', link: '/zh/architecture/', activeMatch: '/zh/architecture/' },
-          { text: '性能', link: '/zh/benchmarks' },
-          { text: 'FAQ', link: '/zh/faq' },
+          { text: '深度', link: '/zh/deep-dive/', activeMatch: '/zh/deep-dive/' },
+          { text: '指南', link: '/zh/guide/', activeMatch: '/zh/guide/' },
+          { text: '规范', link: '/zh/specs/', activeMatch: '/zh/specs/' },
           { text: 'API', link: 'https://docs.rs/bwa-rust' },
           { text: 'GitHub', link: 'https://github.com/LessUp/bwa-rust' },
         ],
@@ -61,11 +65,31 @@ export default withMermaid(defineConfig({
           ],
           '/zh/architecture/': [
             {
-              text: '架构',
+              text: '技术架构',
               items: [
-                { text: '概览', link: '/zh/architecture/' },
+                { text: '架构概览', link: '/zh/architecture/' },
                 { text: '核心算法', link: '/zh/architecture/algorithms' },
                 { text: '比对流水线', link: '/zh/architecture/pipeline' },
+              ],
+            },
+          ],
+          '/zh/deep-dive/': [
+            {
+              text: '技术深度',
+              items: [
+                { text: '索引格式', link: '/zh/deep-dive/' },
+                { text: '内存安全', link: '/zh/deep-dive/memory-safety' },
+                { text: '性能分析', link: '/zh/deep-dive/performance' },
+              ],
+            },
+          ],
+          '/zh/specs/': [
+            {
+              text: '规范与验证',
+              items: [
+                { text: 'OpenSpec 规范', link: '/zh/specs/' },
+                { text: '验证边界', link: '/zh/specs/validation' },
+                { text: '限制声明', link: '/zh/specs/limitations' },
               ],
             },
           ],
@@ -97,10 +121,10 @@ export default withMermaid(defineConfig({
       themeConfig: {
         nav: [
           { text: 'Home', link: '/en/' },
-          { text: 'Guide', link: '/en/guide/', activeMatch: '/en/guide/' },
           { text: 'Architecture', link: '/en/architecture/', activeMatch: '/en/architecture/' },
-          { text: 'Benchmarks', link: '/en/benchmarks' },
-          { text: 'FAQ', link: '/en/faq' },
+          { text: 'Deep Dive', link: '/en/deep-dive/', activeMatch: '/en/deep-dive/' },
+          { text: 'Guide', link: '/en/guide/', activeMatch: '/en/guide/' },
+          { text: 'Specs', link: '/en/specs/', activeMatch: '/en/specs/' },
           { text: 'API', link: 'https://docs.rs/bwa-rust' },
           { text: 'GitHub', link: 'https://github.com/LessUp/bwa-rust' },
         ],
@@ -122,6 +146,26 @@ export default withMermaid(defineConfig({
                 { text: 'Overview', link: '/en/architecture/' },
                 { text: 'Core Algorithms', link: '/en/architecture/algorithms' },
                 { text: 'Alignment Pipeline', link: '/en/architecture/pipeline' },
+              ],
+            },
+          ],
+          '/en/deep-dive/': [
+            {
+              text: 'Deep Dive',
+              items: [
+                { text: 'Index Format', link: '/en/deep-dive/' },
+                { text: 'Memory Safety', link: '/en/deep-dive/memory-safety' },
+                { text: 'Performance', link: '/en/deep-dive/performance' },
+              ],
+            },
+          ],
+          '/en/specs/': [
+            {
+              text: 'Specs',
+              items: [
+                { text: 'OpenSpec', link: '/en/specs/' },
+                { text: 'Validation', link: '/en/specs/validation' },
+                { text: 'Limitations', link: '/en/specs/limitations' },
               ],
             },
           ],

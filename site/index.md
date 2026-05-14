@@ -2,6 +2,10 @@
 layout: home
 ---
 
+<head>
+  <meta http-equiv="refresh" content="0;url=/en/">
+</head>
+
 <script setup>
 import { onMounted } from 'vue'
 onMounted(() => {
