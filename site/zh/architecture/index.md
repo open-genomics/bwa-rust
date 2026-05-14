@@ -2,13 +2,15 @@
 
 bwa-rust 保持一个小而清晰的单端比对流水线：
 
-```text
-FASTA reference
-      |
-      v
-FM-index (.fm)
-      |
-FASTQ read -> SMEM seeds -> chains -> Smith-Waterman -> ranked candidates -> SAM
+```mermaid
+flowchart TB
+    FASTA[FASTA Reference] --> FM[.fm Index]
+    FASTQ[FASTQ Reads] --> SMEM[SMEM Seeding]
+    FM --> SMEM
+    SMEM --> Chain[Chain Building]
+    Chain --> SW[Smith-Waterman]
+    SW --> Rank[Candidate Ranking]
+    Rank --> SAM[SAM Output]
 ```
 
 ## 模块边界
@@ -33,5 +35,5 @@ FASTQ read -> SMEM seeds -> chains -> Smith-Waterman -> ranked candidates -> SAM
 
 ## 继续阅读
 
-- [核心算法](/architecture/algorithms)
-- [比对流水线](/architecture/pipeline)
+- [核心算法](/zh/architecture/algorithms)
+- [比对流水线](/zh/architecture/pipeline)

@@ -1,26 +1,26 @@
-# 使用指南
+# Guide
 
-本指南只覆盖已交付的单端流程：FASTA 参考序列、FASTQ reads、`.fm` 索引和 SAM 输出。
+This guide covers only the delivered single-end workflow: FASTA reference sequences, FASTQ reads, `.fm` index, and SAM output.
 
-## 标准路径
+## Standard Path
 
 ```bash
 bwa-rust index reference.fa -o ref
 bwa-rust align -i ref.fm reads.fq -o output.sam
 ```
 
-也可以用 `mem` 在内存中构建索引并立即比对：
+You can also use `mem` to build the index in memory and align immediately:
 
 ```bash
 bwa-rust mem reference.fa reads.fq -t 4 -o output.sam
 ```
 
-## 参数真值
+## Parameter Ground Truth
 
-CLI 默认值与 `src/align/mod.rs` 的 `AlignOpt::default()` 保持一致。常用参数：
+CLI defaults match `src/align/mod.rs` `AlignOpt::default()`. Common parameters:
 
-| 参数 | 默认值 | CLI |
-|------|--------|-----|
+| Parameter | Default | CLI |
+|-----------|---------|-----|
 | match score | `2` | `--match` / `-A` |
 | mismatch penalty | `1` | `--mismatch` / `-B` |
 | gap open | `2` | `--gap-open` / `-O` |
@@ -30,8 +30,8 @@ CLI 默认值与 `src/align/mod.rs` 的 `AlignOpt::default()` 保持一致。常
 | min seed length | `19` | `--min-seed-len` / `-k` |
 | z-drop | `100` | `--z-drop` / `-d` |
 
-## 下一步
+## Next Steps
 
-- [安装](/guide/installation)
-- [快速开始](/guide/quickstart)
-- [比对流水线](/architecture/pipeline)
+- [Installation](/en/guide/installation)
+- [Quick Start](/en/guide/quickstart)
+- [Alignment Pipeline](/en/architecture/pipeline)

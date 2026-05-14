@@ -4,8 +4,13 @@
 
 索引构建流程：
 
-```text
-normalized reference -> alphabet text -> suffix array -> BWT -> C table + Occ samples -> .fm
+```mermaid
+flowchart LR
+    REF[Reference FASTA] --> NORM[Normalize]
+    NORM --> SA[Suffix Array]
+    SA --> BWT[BWT Transform]
+    BWT --> FM[FM-index]
+    FM --> SAVE[.fm File]
 ```
 
 项目字母表：`{0:$, 1:A, 2:C, 3:G, 4:T, 5:N}`。
