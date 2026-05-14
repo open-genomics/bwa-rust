@@ -40,7 +40,7 @@ fn penalize(score: i32, penalty: i32) -> i32 {
 }
 
 #[inline]
-fn nm_from_ops(ops: &[char], query: &[u8], reference: &[u8]) -> u32 {
+pub fn nm_from_ops(ops: &[char], query: &[u8], reference: &[u8]) -> u32 {
     let mut qi = 0usize;
     let mut rj = 0usize;
     let mut nm = 0u32;

@@ -93,7 +93,7 @@ fn e2e_seed_chain_align_exact() {
         gap_extend: 1,
         band_width: 16,
     };
-    let res = chain_to_alignment(&chains[0], &norm, &ref_seq, p);
+    let res = chain_to_alignment(&chains[0], &norm, &ref_seq, p, 100);
     assert!(res.score > 0);
     assert!(res.cigar.contains('M'));
     assert_eq!(res.nm, 0);
@@ -127,7 +127,7 @@ fn e2e_seed_chain_align_with_mismatch() {
                 gap_extend: 1,
                 band_width: 16,
             };
-            let res = chain_to_alignment(&chains[0], &norm, &ref_seq, p);
+            let res = chain_to_alignment(&chains[0], &norm, &ref_seq, p, 100);
             assert!(res.score > 0);
             assert!(res.cigar.contains('M'));
         }

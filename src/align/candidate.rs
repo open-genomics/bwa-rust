@@ -4,12 +4,11 @@ use crate::index::fm::Contig;
 use crate::index::fm::FMIndex;
 use crate::util::dna;
 
-use super::extend::chain_to_alignment_buf_with_zdrop;
-use super::extend::ChainAlignResult;
+use super::extend::chain_to_alignment_with_buf;
 use super::seed::find_smem_seeds_with_max_occ;
-use super::sw;
+use super::sw::{self, SwBuffer, SwParams, SwResult};
+use super::AlignOpt;
 use super::{build_chains_with_limit, filter_chains};
-use super::{AlignOpt, SwParams};
 
 #[derive(Debug, Clone)]
 pub struct AlignCandidate {
@@ -66,8 +65,8 @@ pub fn collect_candidates(
     // 0.3 阈值来自 BWA 经验值，平衡保留多比对和过滤噪声
     filter_chains(&mut chains, 0.3);
 
-    let mut sw_buf = sw::SwBuffer::new();
-    let mut refine_buf = sw::SwBuffer::new();
+    let mut sw_buf = SwBuffer::new();
+    let mut refine_buf = SwBuffer::new();
     let mut ref_cache: HashMap<usize, Vec<u8>> = HashMap::new();
 
     for ch in &chains {
@@ -85,8 +84,7 @@ pub fn collect_candidates(
             continue;
         }
 
-        let approx =
-            chain_to_alignment_buf_with_zdrop(ch, query_norm, ref_seq.as_slice(), sw_params, opt.zdrop, &mut sw_buf);
+        let approx = chain_to_alignment_with_buf(ch, query_norm, ref_seq.as_slice(), sw_params, opt.zdrop, &mut sw_buf);
         let refined = refine_candidate_alignment(ch, query_norm, ref_seq.as_slice(), sw_params, &mut refine_buf);
         let (ref_offset, selected) = choose_alignment(approx, refined, opt.clip_penalty);
 
@@ -113,8 +111,8 @@ fn refine_candidate_alignment(
     query_norm: &[u8],
     reference: &[u8],
     sw_params: SwParams,
-    sw_buf: &mut sw::SwBuffer,
-) -> Option<(usize, ChainAlignResult)> {
+    sw_buf: &mut SwBuffer,
+) -> Option<(usize, SwResult)> {
     if chain.seeds.is_empty() || query_norm.is_empty() || reference.is_empty() {
         return None;
     }
@@ -133,25 +131,10 @@ fn refine_candidate_alignment(
         return None;
     }
 
-    Some((
-        window_start,
-        ChainAlignResult {
-            score: res.score,
-            cigar: res.cigar,
-            nm: res.nm,
-            query_start: res.query_start,
-            query_end: res.query_end,
-            ref_start: res.ref_start,
-            ref_end: res.ref_end,
-        },
-    ))
+    Some((window_start, res))
 }
 
-fn choose_alignment(
-    approx: ChainAlignResult,
-    refined: Option<(usize, ChainAlignResult)>,
-    clip_penalty: i32,
-) -> (usize, ChainAlignResult) {
+fn choose_alignment(approx: SwResult, refined: Option<(usize, SwResult)>, clip_penalty: i32) -> (usize, SwResult) {
     let approx_rank = effective_score(approx.score, &approx.cigar, clip_penalty);
     let Some((window_offset, refined)) = refined else {
         return (0, approx);
@@ -172,7 +155,7 @@ fn build_candidate(
     contig: &Contig,
     contig_idx: usize,
     is_rev: bool,
-    res: &ChainAlignResult,
+    res: &SwResult,
     ref_offset: usize,
     clip_penalty: i32,
     ref_seq: &[u8],
@@ -475,14 +458,14 @@ mod tests {
             len: 4,
             offset: 0,
         };
-        let res = ChainAlignResult {
+        let res = SwResult {
             score: 8,
-            cigar: "2S4M2S".to_string(),
-            nm: 0,
             query_start: 2,
             query_end: 6,
             ref_start: 0,
             ref_end: 4,
+            cigar: "2S4M2S".to_string(),
+            nm: 0,
         };
 
         let cand = build_candidate(&contig, 0, false, &res, 0, 1, b"ACGT", b"NNACGTNN", 8);

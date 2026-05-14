@@ -155,11 +155,6 @@ fn dedup_seeds(seeds: &mut Vec<MemSeed>) {
     seeds.dedup();
 }
 
-/// 向后兼容的 MEM 种子查找（等价于 [`find_smem_seeds`]，保留原有接口）。
-pub fn find_mem_seeds(fm: &FMIndex, query_alpha: &[u8], min_len: usize) -> Vec<MemSeed> {
-    find_smem_seeds(fm, query_alpha, min_len)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -257,15 +252,6 @@ mod tests {
                 assert!(seeds[i] != seeds[j], "duplicate seed found at {} and {}", i, j);
             }
         }
-    }
-
-    #[test]
-    fn find_mem_seeds_same_as_smem() {
-        let fm = build_test_fm(b"ACGTACGTACGT");
-        let alpha: Vec<u8> = b"CGTA".iter().map(|&b| dna::to_alphabet(b)).collect();
-        let seeds1 = find_smem_seeds(&fm, &alpha, 2);
-        let seeds2 = find_mem_seeds(&fm, &alpha, 2);
-        assert_eq!(seeds1, seeds2);
     }
 
     #[test]

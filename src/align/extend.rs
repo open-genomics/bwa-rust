@@ -1,69 +1,37 @@
 use std::fmt::Write as _;
 
 use super::chain::Chain;
-use super::sw::{self, SwBuffer, SwParams};
+use super::sw::{self, SwBuffer, SwParams, SwResult};
 
 /// 链端延伸时参考序列的额外填充长度（对齐左/右端时预留 buffer，防止带状 SW 被参考边界截断）
 const EXTEND_REF_PAD: usize = 32;
-
-#[derive(Debug, PartialEq, Eq)]
-pub struct ChainAlignResult {
-    pub score: i32,
-    pub cigar: String,
-    pub nm: u32,
-    pub query_start: usize,
-    pub query_end: usize,
-    pub ref_start: usize,
-    pub ref_end: usize,
-}
 
 /// 将单条种子链转换为完整的对齐结果（CIGAR、NM、得分）。
 ///
 /// 对链的两端及链内种子间的 gap 分别调用带状 SW（左端用 `extend_left`，右端用 `extend_right`，
 /// 链内 gap 用 `global_align`），最终拼接 CIGAR 并在两端补软裁剪（`S`）。
-/// 使用预分配的 `SwBuffer` 避免热路径内存分配。
-pub fn chain_to_alignment(chain: &Chain, query: &[u8], reference: &[u8], p: SwParams) -> ChainAlignResult {
-    chain_to_alignment_with_zdrop(chain, query, reference, p, 100)
-}
-
-pub fn chain_to_alignment_with_zdrop(
-    chain: &Chain,
-    query: &[u8],
-    reference: &[u8],
-    p: SwParams,
-    zdrop: i32,
-) -> ChainAlignResult {
-    chain_to_alignment_buf_with_zdrop(chain, query, reference, p, zdrop, &mut SwBuffer::new())
+pub fn chain_to_alignment(chain: &Chain, query: &[u8], reference: &[u8], p: SwParams, zdrop: i32) -> SwResult {
+    chain_to_alignment_with_buf(chain, query, reference, p, zdrop, &mut SwBuffer::new())
 }
 
 /// 同 [`chain_to_alignment`]，但接受外部 `SwBuffer` 以供跨调用复用，减少内存分配。
-pub fn chain_to_alignment_buf(
-    chain: &Chain,
-    query: &[u8],
-    reference: &[u8],
-    p: SwParams,
-    buf: &mut SwBuffer,
-) -> ChainAlignResult {
-    chain_to_alignment_buf_with_zdrop(chain, query, reference, p, 100, buf)
-}
-
-pub fn chain_to_alignment_buf_with_zdrop(
+pub fn chain_to_alignment_with_buf(
     chain: &Chain,
     query: &[u8],
     reference: &[u8],
     p: SwParams,
     zdrop: i32,
     buf: &mut SwBuffer,
-) -> ChainAlignResult {
+) -> SwResult {
     if chain.seeds.is_empty() {
-        return ChainAlignResult {
+        return SwResult {
             score: 0,
-            cigar: String::new(),
-            nm: 0,
             query_start: 0,
             query_end: 0,
             ref_start: 0,
             ref_end: 0,
+            cigar: String::new(),
+            nm: 0,
         };
     }
 
@@ -91,7 +59,7 @@ pub fn chain_to_alignment_buf_with_zdrop(
         if left_ext.score > 0 && !left_ext.ops.is_empty() {
             push_char_ops(&mut ops, &left_ext.ops);
             total_score += left_ext.score;
-            total_nm += nm_from_ops(
+            total_nm += sw::nm_from_ops(
                 &left_ext.ops,
                 &left_q[left_q.len() - left_ext.query_len..],
                 &left_r[left_r.len() - left_ext.ref_len..],
@@ -156,7 +124,7 @@ pub fn chain_to_alignment_buf_with_zdrop(
         if right_ext.score > 0 && !right_ext.ops.is_empty() {
             push_char_ops(&mut ops, &right_ext.ops);
             total_score += right_ext.score;
-            total_nm += nm_from_ops(
+            total_nm += sw::nm_from_ops(
                 &right_ext.ops,
                 &right_q[..right_ext.query_len],
                 &right_r[..right_ext.ref_len],
@@ -179,14 +147,14 @@ pub fn chain_to_alignment_buf_with_zdrop(
         let _ = write!(&mut cigar, "{}{}", len, op);
     }
 
-    ChainAlignResult {
+    SwResult {
         score: total_score,
-        cigar,
-        nm: total_nm,
         query_start,
         query_end,
         ref_start,
         ref_end,
+        cigar,
+        nm: total_nm,
     }
 }
 
@@ -209,37 +177,12 @@ fn push_char_ops(ops: &mut Vec<(char, usize)>, chars: &[char]) {
     }
 }
 
-fn nm_from_ops(ops: &[char], query: &[u8], reference: &[u8]) -> u32 {
-    let mut qi = 0usize;
-    let mut ri = 0usize;
-    let mut nm = 0u32;
-    for &op in ops {
-        match op {
-            'M' => {
-                if qi < query.len() && ri < reference.len() && query[qi] != reference[ri] {
-                    nm += 1;
-                }
-                qi += 1;
-                ri += 1;
-            }
-            'I' => {
-                nm += 1;
-                qi += 1;
-            }
-            'D' => {
-                nm += 1;
-                ri += 1;
-            }
-            _ => {}
-        }
-    }
-    nm
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::align::seed::MemSeed;
+
+    const DEFAULT_ZDROP: i32 = 100;
 
     fn default_params() -> SwParams {
         SwParams {
@@ -265,7 +208,7 @@ mod tests {
             }],
             score: 4,
         };
-        let res = chain_to_alignment(&chain, b"ACGT", b"ACGT", p);
+        let res = chain_to_alignment(&chain, b"ACGT", b"ACGT", p, DEFAULT_ZDROP);
         assert_eq!(res.score, 8);
         assert_eq!(res.cigar, "4M");
         assert_eq!(res.nm, 0);
@@ -279,7 +222,7 @@ mod tests {
             seeds: vec![],
             score: 0,
         };
-        let res = chain_to_alignment(&chain, b"ACGT", b"ACGT", p);
+        let res = chain_to_alignment(&chain, b"ACGT", b"ACGT", p, DEFAULT_ZDROP);
         assert_eq!(res.score, 0);
         assert!(res.cigar.is_empty());
     }
@@ -309,7 +252,7 @@ mod tests {
         };
         let query = b"ACGTACGT";
         let reference = b"ACGTACGT";
-        let res = chain_to_alignment(&chain, query, reference, p);
+        let res = chain_to_alignment(&chain, query, reference, p, DEFAULT_ZDROP);
         assert_eq!(res.score, 16); // 8 bases * match_score(2)
         assert_eq!(res.cigar, "8M");
         assert_eq!(res.nm, 0);
@@ -340,7 +283,7 @@ mod tests {
         };
         let query = b"ACGTXXACGT";
         let reference = b"ACGTXXACGT";
-        let res = chain_to_alignment(&chain, query, reference, p);
+        let res = chain_to_alignment(&chain, query, reference, p, DEFAULT_ZDROP);
         assert!(res.score > 0);
         assert!(res.cigar.contains('M'));
     }
@@ -361,7 +304,7 @@ mod tests {
         };
         let query = b"ACGTNNNN";
         let reference = b"ACGT";
-        let res = chain_to_alignment(&chain, query, reference, p);
+        let res = chain_to_alignment(&chain, query, reference, p, DEFAULT_ZDROP);
         assert!(res.cigar.contains('S'));
     }
 
@@ -388,8 +331,8 @@ mod tests {
         let query = b"TTTTAAAACCCCAAAA";
         let reference = b"TTTTAAAAGGGGAAAA";
 
-        let strict = chain_to_alignment_with_zdrop(&chain, query, reference, p, 3);
-        let loose = chain_to_alignment_with_zdrop(&chain, query, reference, p, 100);
+        let strict = chain_to_alignment(&chain, query, reference, p, 3);
+        let loose = chain_to_alignment(&chain, query, reference, p, 100);
 
         assert!(strict.query_end < loose.query_end);
         assert!(loose.cigar.starts_with("16M"));
@@ -418,7 +361,7 @@ mod tests {
             ],
             score: 6,
         };
-        let res = chain_to_alignment(&chain, b"ACGACG", b"ACGACG", p);
+        let res = chain_to_alignment(&chain, b"ACGACG", b"ACGACG", p, DEFAULT_ZDROP);
         // Adjacent M seeds should merge into a single run
         assert_eq!(res.cigar, "6M");
     }
@@ -439,7 +382,7 @@ mod tests {
         };
         let query = b"NNACGTNN";
         let reference = b"NNACGTNN";
-        let res = chain_to_alignment(&chain, query, reference, p);
+        let res = chain_to_alignment(&chain, query, reference, p, DEFAULT_ZDROP);
         assert!(res.score > 0);
         // query_start <= 2, query_end >= 6
         assert!(res.query_start <= 2);
@@ -477,7 +420,7 @@ mod tests {
         };
         let query = b"AAAACCCCGGGG";
         let reference = b"AAAATTTTCCCCGGGG";
-        let res = chain_to_alignment(&chain, query, reference, p);
+        let res = chain_to_alignment(&chain, query, reference, p, DEFAULT_ZDROP);
 
         assert_eq!(res.cigar, "4M4D8M");
         assert_eq!(res.nm, 4);
