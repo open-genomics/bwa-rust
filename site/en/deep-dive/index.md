@@ -85,7 +85,7 @@ bwa-rust align reference.fm reads.fastq -o output.sam
 
 ## Implementation Details
 
-See [FM-index Builder](/en/architecture/algorithms#fm-index-construction) for the construction algorithm.
+See [FM-index Builder](/en/architecture/algorithms#fm-index) for the construction algorithm.
 
 ::: tip Memory Efficiency
 The sparse sampling strategy makes bwa-rust suitable for environments with limited memory, while maintaining reasonable query performance.

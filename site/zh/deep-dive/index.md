@@ -85,7 +85,7 @@ bwa-rust align reference.fm reads.fastq -o output.sam
 
 ## 实现细节
 
-参见 [FM-index 构建](/zh/architecture/algorithms#fm-index-构建)了解构建算法。
+参见 [FM-index 构建](/zh/architecture/algorithms#fm-index)了解构建算法。
 
 ::: tip 内存效率
 稀疏采样策略使 bwa-rust 适合内存有限的环境，同时保持合理的查询性能。
