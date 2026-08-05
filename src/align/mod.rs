@@ -1,7 +1,6 @@
 pub mod candidate;
 pub mod chain;
 pub mod extend;
-pub mod insert_size;
 pub mod mapq;
 pub mod pipeline;
 pub mod seed;
@@ -28,36 +27,6 @@ pub const DEFAULT_MAX_ALIGNMENTS_PER_READ: usize = 5;
 
 /// Default Z-drop threshold for alignment extension
 pub const DEFAULT_ZDROP: i32 = 100;
-
-/// Default maximum insert size for paired-end alignment
-pub const DEFAULT_MAX_INSERT: usize = 500;
-
-/// Default minimum insert size for paired-end alignment
-pub const DEFAULT_MIN_INSERT: usize = 0;
-
-/// Options for paired-end alignment.
-#[derive(Clone, Copy, Debug)]
-pub struct PairingOpt {
-    /// Minimum insert size (distance between read pairs)
-    pub min_insert: usize,
-    /// Maximum insert size
-    pub max_insert: usize,
-    /// Enable mate rescue for unmapped mates
-    pub mate_rescue: bool,
-    /// Penalty for unpaired alignments
-    pub pen_unpaired: i32,
-}
-
-impl Default for PairingOpt {
-    fn default() -> Self {
-        Self {
-            min_insert: DEFAULT_MIN_INSERT,
-            max_insert: DEFAULT_MAX_INSERT,
-            mate_rescue: true,
-            pen_unpaired: 17,
-        }
-    }
-}
 
 #[derive(Clone, Copy, Debug)]
 pub struct AlignOpt {

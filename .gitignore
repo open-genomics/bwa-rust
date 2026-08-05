@@ -2,57 +2,28 @@
 /target/
 **/*.rs.bk
 
-# IDE
-# .vscode/ is tracked for project-level shared workspace config
-# Personal overrides go in .vscode/*.local.json (ignored via pattern below)
-.vscode/*.local.json
-.idea/
-.windsurf/
-*.swp
-*.swo
-*.iml
-*.sublime-project
-*.sublime-workspace
-
-# OS
-Thumbs.db
-.DS_Store
-Desktop.ini
-ehthumbs.db
-
 # Generated index files
 *.fm
 
-# Benchmark output & profiling
+# Benchmark / profiling
 /target/criterion/
 perf.data
 perf.data.old
 flamegraph.svg
-cachegrind.out.*
-callgrind.out.*
 
 # Coverage
 /coverage/
 *.profraw
 *.profdata
-lcov.info
-tarpaulin-report.html
 
-# Documentation build
-/target/doc/
+# OS
+.DS_Store
+Thumbs.db
 
-# Node.js / VitePress
-node_modules/
-site/.vitepress/dist/
-site/.vitepress/cache/
+# Editor
+*.swp
+*.swo
 
 # Environment
 .env
 .env.local
-CLAUDE.local.md
-.claude/settings.local.json
-
-# BMad Method V6
-_bmad/
-_bmad-output/
-.omc/

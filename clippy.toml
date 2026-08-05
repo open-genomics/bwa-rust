@@ -14,4 +14,5 @@ too-many-arguments-threshold = 8
 type-complexity-threshold = 300
 
 # MSRV：与 Cargo.toml 中 rust-version 保持一致
-msrv = "1.70"
+msrv = "1.85"
+

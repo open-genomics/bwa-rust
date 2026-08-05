@@ -70,7 +70,7 @@ mod tests {
 
     #[test]
     fn error_source() {
-        let io_err = io::Error::new(io::ErrorKind::Other, "test");
+        let io_err = io::Error::other("test");
         let e = BwaError::Io(io_err);
         assert!(std::error::Error::source(&e).is_some());
 

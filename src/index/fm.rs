@@ -84,7 +84,7 @@ impl FMIndex {
 
         // 采样 Occ
         let block_u = block as u32;
-        let num_blocks = if n == 0 { 0 } else { (n + block - 1) / block };
+        let num_blocks = if n == 0 { 0 } else { n.div_ceil(block) };
         let mut occ_samples = vec![0u32; num_blocks * sigma_us];
         let mut running = vec![0u32; sigma_us];
         for bi in 0..num_blocks {
@@ -186,7 +186,7 @@ impl FMIndex {
         let expected_blocks = if self.bwt.is_empty() {
             0
         } else {
-            (self.bwt.len() + self.block as usize - 1) / self.block as usize
+            self.bwt.len().div_ceil(self.block as usize)
         };
         let expected_occ_len = expected_blocks * self.sigma as usize;
         if self.occ_samples.len() != expected_occ_len {
@@ -202,7 +202,7 @@ impl FMIndex {
             }
         } else {
             let rate = self.sa_sample_rate as usize;
-            let expected_sa_len = (self.bwt.len() + rate - 1) / rate;
+            let expected_sa_len = self.bwt.len().div_ceil(rate);
             if self.sa.len() != expected_sa_len {
                 return Err(anyhow!(
                     "invalid FM index file: sparse SA length mismatch (expected {}, got {})",

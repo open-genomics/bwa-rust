@@ -6,11 +6,8 @@ authors = ["LessUp"]
 description = "A BWA-inspired sequence aligner implemented in Rust, featuring FM-index, SMEM seeding, and banded Smith-Waterman alignment"
 license = "MIT"
 repository = "https://github.com/LessUp/bwa-rust"
-homepage = "https://github.com/LessUp/bwa-rust"
 readme = "README.md"
-keywords = ["bioinformatics", "bwa", "alignment", "fm-index", "genomics"]
-categories = ["science", "command-line-utilities"]
-rust-version = "1.70"
+rust-version = "1.85"
 
 # ── 依赖 ──────────────────────────────────────────────
 
@@ -30,11 +27,6 @@ tikv-jemallocator = "0.6.0"
 [dev-dependencies]
 criterion = { version = "0.8.2", features = ["html_reports"] }
 
-[features]
-default = []
-# 启用真实数据测试（需要下载测试数据）
-real-data = []
-
 [[bench]]
 name = "benchmarks"
 harness = false
@@ -51,11 +43,7 @@ large_enum_variant = "warn"
 clone_on_ref_ptr = "warn"
 redundant_closure_for_method_calls = "warn"
 semicolon_if_nothing_returned = "warn"
-cast_possible_truncation = "allow"
-cast_sign_loss = "allow"
-cast_precision_loss = "allow"
 too_many_arguments = "allow"
-module_name_repetitions = "allow"
 
 # ── Profile 优化 ──────────────────────────────────────
 

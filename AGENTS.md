@@ -17,12 +17,8 @@ Not shipped: paired-end CLI alignment, BAM/CRAM output, BWA index compatibility,
 
 ## Source Of Truth
 
-- Requirements: `openspec/specs/`.
-- Active changes: `openspec/changes/<name>/`.
 - CLI/library defaults: `src/align/mod.rs` `AlignOpt::default()`.
-- Public story: `README.md`, `README.zh-CN.md`, `site/`.
-
-Use OpenSpec before new features, public API changes, index format changes, complex refactors, CI/governance changes, or major docs/site rewrites.
+- Public story: `README.md`.
 
 ## Code Rules
 
@@ -39,7 +35,7 @@ Use OpenSpec before new features, public API changes, index format changes, comp
 - `src/align/seed.rs`: SMEM/MEM seed discovery and occurrence filtering.
 - `src/align/chain.rs`: chain scoring, filtering, multi-chain extraction.
 - `src/align/sw.rs`: banded SW, global/semi-global alignment, extension primitives.
-- `src/align/extend.rs`: chain-to-CIGAR extension and z-drop plumbing.
+- `src/align/extend.rs`: chain-to-CIGAR extension and zdrop plumbing.
 - `src/align/candidate.rs`: candidate collection, refinement, dedup/ranking fields.
 - `src/align/pipeline.rs`: per-read alignment, MAPQ, primary/secondary/supplementary output.
 - `src/io/`: FASTA/FASTQ/SAM parsing and formatting.
@@ -47,13 +43,12 @@ Use OpenSpec before new features, public API changes, index format changes, comp
 
 ## Verification
 
-After code or workflow/doc-site changes run the relevant subset, and before completion run all:
+After code or workflow changes run the relevant subset, and before completion run all:
 
 ```bash
 cargo fmt --all -- --check
 cargo clippy --all-targets --all-features -- -D warnings
 cargo test --all-targets --all-features
-npm run docs:build
 ```
 
 Use `cargo bench` only for performance-sensitive changes.
