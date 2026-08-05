@@ -45,41 +45,12 @@ enum Commands {
         /// Output SAM path (stdout if omitted)
         #[arg(short, long)]
         out: Option<String>,
-        #[arg(long = "match", default_value_t = align::AlignOpt::default().match_score)]
-        match_score: i32,
-        #[arg(long = "mismatch", default_value_t = align::AlignOpt::default().mismatch_penalty)]
-        mismatch_penalty: i32,
-        #[arg(long = "gap-open", default_value_t = align::AlignOpt::default().gap_open)]
-        gap_open: i32,
-        #[arg(long = "gap-ext", default_value_t = align::AlignOpt::default().gap_extend)]
-        gap_extend: i32,
-        #[arg(long = "clip-penalty", default_value_t = align::AlignOpt::default().clip_penalty)]
-        clip_penalty: i32,
-        #[arg(long = "band-width", default_value_t = align::AlignOpt::default().band_width)]
-        band_width: usize,
-        #[arg(long = "score-threshold", default_value_t = align::AlignOpt::default().score_threshold)]
-        score_threshold: i32,
         /// Minimum seed length
         #[arg(short = 'k', long = "min-seed-len", default_value_t = align::AlignOpt::default().min_seed_len)]
         min_seed_len: usize,
-        /// Z-drop threshold for alignment extension
-        #[arg(short = 'd', long = "z-drop", default_value_t = align::AlignOpt::default().zdrop)]
-        zdrop: i32,
-        /// Preset configuration (pacbio, ont2d)
-        #[arg(short = 'x', long = "preset")]
-        preset: Option<String>,
         /// Number of threads
         #[arg(short = 't', long = "threads", value_parser = parse_threads, default_value_t = align::AlignOpt::default().threads)]
         threads: usize,
-        /// Maximum occurrences for a MEM seed (skip highly repetitive seeds)
-        #[arg(long = "max-occ", default_value_t = align::AlignOpt::default().max_occ)]
-        max_occ: usize,
-        /// Maximum chains to extract per contig
-        #[arg(long = "max-chains", default_value_t = align::AlignOpt::default().max_chains_per_contig)]
-        max_chains: usize,
-        /// Maximum alignments to output per read
-        #[arg(long = "max-alignments", default_value_t = align::AlignOpt::default().max_alignments_per_read)]
-        max_alignments: usize,
     },
     /// BWA-MEM style alignment: build index from FASTA and align FASTQ in one step
     Mem {
@@ -90,48 +61,12 @@ enum Commands {
         /// Output SAM path (stdout if omitted)
         #[arg(short, long)]
         out: Option<String>,
-        /// Match score
-        #[arg(short = 'A', long = "match", default_value_t = align::AlignOpt::default().match_score)]
-        match_score: i32,
-        /// Mismatch penalty
-        #[arg(short = 'B', long = "mismatch", default_value_t = align::AlignOpt::default().mismatch_penalty)]
-        mismatch_penalty: i32,
-        /// Gap open penalty
-        #[arg(short = 'O', long = "gap-open", default_value_t = align::AlignOpt::default().gap_open)]
-        gap_open: i32,
-        /// Gap extension penalty
-        #[arg(short = 'E', long = "gap-ext", default_value_t = align::AlignOpt::default().gap_extend)]
-        gap_extend: i32,
-        /// Soft-clipping penalty used during candidate ranking
-        #[arg(long = "clip-penalty", default_value_t = align::AlignOpt::default().clip_penalty)]
-        clip_penalty: i32,
-        /// Band width for banded SW
-        #[arg(short = 'w', long = "band-width", default_value_t = align::AlignOpt::default().band_width)]
-        band_width: usize,
-        /// Minimum alignment score to output
-        #[arg(short = 'T', long = "score-threshold", default_value_t = align::AlignOpt::default().score_threshold)]
-        score_threshold: i32,
         /// Minimum seed length
         #[arg(short = 'k', long = "min-seed-len", default_value_t = align::AlignOpt::default().min_seed_len)]
         min_seed_len: usize,
-        /// Z-drop threshold for alignment extension
-        #[arg(short = 'd', long = "z-drop", default_value_t = align::AlignOpt::default().zdrop)]
-        zdrop: i32,
-        /// Preset configuration (pacbio, ont2d)
-        #[arg(short = 'x', long = "preset")]
-        preset: Option<String>,
         /// Number of threads
         #[arg(short = 't', long = "threads", value_parser = parse_threads, default_value_t = align::AlignOpt::default().threads)]
         threads: usize,
-        /// Maximum occurrences for a MEM seed (skip highly repetitive seeds)
-        #[arg(long = "max-occ", default_value_t = align::AlignOpt::default().max_occ)]
-        max_occ: usize,
-        /// Maximum chains to extract per contig
-        #[arg(long = "max-chains", default_value_t = align::AlignOpt::default().max_chains_per_contig)]
-        max_chains: usize,
-        /// Maximum alignments to output per read
-        #[arg(long = "max-alignments", default_value_t = align::AlignOpt::default().max_alignments_per_read)]
-        max_alignments: usize,
     },
 }
 
@@ -143,64 +78,12 @@ fn parse_threads(s: &str) -> std::result::Result<usize, String> {
     Ok(threads)
 }
 
-/// Apply preset configuration to alignment options
-fn apply_preset(opt: &mut align::AlignOpt, preset: &str) {
-    match preset {
-        "pacbio" | "pacbio-hifi" => {
-            opt.min_seed_len = 17;
-            opt.band_width = 200;
-            opt.score_threshold = 10;
-        }
-        "ont2d" | "ont" => {
-            opt.min_seed_len = 14;
-            opt.band_width = 100;
-            opt.score_threshold = 10;
-        }
-        _ => {
-            eprintln!(
-                "[bwa-rust] Warning: unknown preset '{}', using default parameters",
-                preset
-            );
-        }
-    }
-}
-
-fn build_align_opt(
-    match_score: i32,
-    mismatch_penalty: i32,
-    gap_open: i32,
-    gap_extend: i32,
-    clip_penalty: i32,
-    band_width: usize,
-    score_threshold: i32,
-    min_seed_len: usize,
-    zdrop: i32,
-    threads: usize,
-    max_occ: usize,
-    max_chains: usize,
-    max_alignments: usize,
-    preset: Option<&str>,
-) -> align::AlignOpt {
-    let mut opt = align::AlignOpt {
-        match_score,
-        mismatch_penalty,
-        gap_open,
-        gap_extend,
-        clip_penalty,
-        band_width,
-        score_threshold,
+fn build_align_opt(min_seed_len: usize, threads: usize) -> align::AlignOpt {
+    let opt = align::AlignOpt {
         min_seed_len,
         threads,
-        zdrop,
-        max_occ,
-        max_chains_per_contig: max_chains,
-        max_alignments_per_read: max_alignments,
+        ..align::AlignOpt::default()
     };
-
-    if let Some(p) = preset {
-        apply_preset(&mut opt, p);
-    }
-
     if let Err(e) = opt.validate() {
         eprintln!("Error: invalid alignment parameters: {}", e);
         std::process::exit(1);
@@ -216,74 +99,20 @@ fn main() -> Result<()> {
             index,
             reads,
             out,
-            match_score,
-            mismatch_penalty,
-            gap_open,
-            gap_extend,
-            clip_penalty,
-            band_width,
-            score_threshold,
             min_seed_len,
-            zdrop,
-            preset,
             threads,
-            max_occ,
-            max_chains,
-            max_alignments,
         } => {
-            let opt = build_align_opt(
-                match_score,
-                mismatch_penalty,
-                gap_open,
-                gap_extend,
-                clip_penalty,
-                band_width,
-                score_threshold,
-                min_seed_len,
-                zdrop,
-                threads,
-                max_occ,
-                max_chains,
-                max_alignments,
-                preset.as_deref(),
-            );
+            let opt = build_align_opt(min_seed_len, threads);
             run_align(&index, &reads, out.as_deref(), opt)
         }
         Commands::Mem {
             reference,
             reads,
             out,
-            match_score,
-            mismatch_penalty,
-            gap_open,
-            gap_extend,
-            clip_penalty,
-            band_width,
-            score_threshold,
             min_seed_len,
-            zdrop,
-            preset,
             threads,
-            max_occ,
-            max_chains,
-            max_alignments,
         } => {
-            let opt = build_align_opt(
-                match_score,
-                mismatch_penalty,
-                gap_open,
-                gap_extend,
-                clip_penalty,
-                band_width,
-                score_threshold,
-                min_seed_len,
-                zdrop,
-                threads,
-                max_occ,
-                max_chains,
-                max_alignments,
-                preset.as_deref(),
-            );
+            let opt = build_align_opt(min_seed_len, threads);
             run_mem(&reference, &reads, out.as_deref(), opt)
         }
     }
@@ -337,82 +166,34 @@ mod tests {
     use super::*;
 
     #[test]
-    fn mem_defaults_match_align_opt_default() {
-        let cli = Cli::try_parse_from(["bwa-rust", "mem", "ref.fa", "reads.fq"]).unwrap();
-        let defaults = align::AlignOpt::default();
-
-        let Commands::Mem {
-            match_score,
-            mismatch_penalty,
-            gap_open,
-            gap_extend,
-            clip_penalty,
-            band_width,
-            score_threshold,
-            min_seed_len,
-            zdrop,
-            threads,
-            max_occ,
-            max_chains,
-            max_alignments,
-            ..
-        } = cli.command
-        else {
-            panic!("expected mem command");
-        };
-
-        assert_eq!(match_score, defaults.match_score);
-        assert_eq!(mismatch_penalty, defaults.mismatch_penalty);
-        assert_eq!(gap_open, defaults.gap_open);
-        assert_eq!(gap_extend, defaults.gap_extend);
-        assert_eq!(clip_penalty, defaults.clip_penalty);
-        assert_eq!(band_width, defaults.band_width);
-        assert_eq!(score_threshold, defaults.score_threshold);
-        assert_eq!(min_seed_len, defaults.min_seed_len);
-        assert_eq!(zdrop, defaults.zdrop);
-        assert_eq!(threads, defaults.threads);
-        assert_eq!(max_occ, defaults.max_occ);
-        assert_eq!(max_chains, defaults.max_chains_per_contig);
-        assert_eq!(max_alignments, defaults.max_alignments_per_read);
-    }
-
-    #[test]
     fn align_defaults_match_align_opt_default() {
         let cli = Cli::try_parse_from(["bwa-rust", "align", "-i", "ref.fm", "reads.fq"]).unwrap();
         let defaults = align::AlignOpt::default();
 
         let Commands::Align {
-            match_score,
-            mismatch_penalty,
-            gap_open,
-            gap_extend,
-            clip_penalty,
-            band_width,
-            score_threshold,
-            min_seed_len,
-            zdrop,
-            threads,
-            max_occ,
-            max_chains,
-            max_alignments,
-            ..
+            min_seed_len, threads, ..
         } = cli.command
         else {
             panic!("expected align command");
         };
 
-        assert_eq!(match_score, defaults.match_score);
-        assert_eq!(mismatch_penalty, defaults.mismatch_penalty);
-        assert_eq!(gap_open, defaults.gap_open);
-        assert_eq!(gap_extend, defaults.gap_extend);
-        assert_eq!(clip_penalty, defaults.clip_penalty);
-        assert_eq!(band_width, defaults.band_width);
-        assert_eq!(score_threshold, defaults.score_threshold);
         assert_eq!(min_seed_len, defaults.min_seed_len);
-        assert_eq!(zdrop, defaults.zdrop);
         assert_eq!(threads, defaults.threads);
-        assert_eq!(max_occ, defaults.max_occ);
-        assert_eq!(max_chains, defaults.max_chains_per_contig);
-        assert_eq!(max_alignments, defaults.max_alignments_per_read);
+    }
+
+    #[test]
+    fn mem_defaults_match_align_opt_default() {
+        let cli = Cli::try_parse_from(["bwa-rust", "mem", "ref.fa", "reads.fq"]).unwrap();
+        let defaults = align::AlignOpt::default();
+
+        let Commands::Mem {
+            min_seed_len, threads, ..
+        } = cli.command
+        else {
+            panic!("expected mem command");
+        };
+
+        assert_eq!(min_seed_len, defaults.min_seed_len);
+        assert_eq!(threads, defaults.threads);
     }
 }
