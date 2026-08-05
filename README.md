@@ -1,7 +1,7 @@
 # bwa-rust
 
-[![CI](https://github.com/LessUp/bwa-rust/actions/workflows/ci.yml/badge.svg)](https://github.com/LessUp/bwa-rust/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/LessUp/bwa-rust?color=blue)](https://github.com/LessUp/bwa-rust/releases)
+[![CI](https://github.com/AICL-Lab/bwa-rust/actions/workflows/ci.yml/badge.svg)](https://github.com/AICL-Lab/bwa-rust/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/AICL-Lab/bwa-rust?color=blue)](https://github.com/AICL-Lab/bwa-rust/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Rust](https://img.shields.io/badge/rust-1.85%2B-orange.svg)](Cargo.toml)
 
@@ -22,7 +22,7 @@
 
 ## 安装
 
-从 [GitHub Releases](https://github.com/LessUp/bwa-rust/releases) 下载对应平台产物：
+从 [GitHub Releases](https://github.com/AICL-Lab/bwa-rust/releases) 下载对应平台产物：
 
 | 平台 | 产物 |
 |------|------|
@@ -35,7 +35,7 @@
 从源码构建：
 
 ```bash
-git clone https://github.com/LessUp/bwa-rust.git
+git clone https://github.com/AICL-Lab/bwa-rust.git
 cd bwa-rust
 cargo build --release
 ```
