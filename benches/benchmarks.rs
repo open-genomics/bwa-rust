@@ -7,7 +7,7 @@ use bwa_rust::index::{bwt, fm, sa};
 use bwa_rust::util::dna;
 
 fn make_reference(len: usize) -> Vec<u8> {
-    let bases = [b'A', b'C', b'G', b'T'];
+    let bases = *b"ACGT";
     let mut seq = Vec::with_capacity(len);
     let mut x: u32 = 42;
     for _ in 0..len {
