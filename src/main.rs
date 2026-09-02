@@ -78,6 +78,33 @@ fn parse_threads(s: &str) -> std::result::Result<usize, String> {
     Ok(threads)
 }
 
+/// 生成当前 UTC 时间的 RFC3339 格式时间戳（`YYYY-MM-DDTHH:MM:SSZ`）。
+/// 仅用于索引元数据展示，无需引入完整的日期时间依赖。
+fn rfc3339_now() -> String {
+    let secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    // 天数从 1970-01-01 起算（civil date 换算）
+    let days = secs / 86400;
+    let rem = secs % 86400;
+    let (h, m, s) = (rem / 3600, (rem % 3600) / 60, rem % 60);
+
+    // Howard Hinnant 的 civil_from_days 算法
+    let z = days as i64 + 719_468;
+    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
+    let doe = (z - era * 146_097) as u64;
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146_096) / 365;
+    let y = yoe as i64 + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let mth = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = if mth <= 2 { y + 1 } else { y };
+
+    format!("{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z", y, mth, d, h, m, s)
+}
+
 fn build_align_opt(min_seed_len: usize, threads: usize) -> align::AlignOpt {
     let opt = align::AlignOpt {
         min_seed_len,
@@ -128,7 +155,7 @@ fn run_index(reference: &str, output: &str) -> Result<()> {
     result.fm.set_meta(index::fm::IndexMeta {
         reference_file: Some(reference.to_string()),
         build_args: Some(std::env::args().collect::<Vec<_>>().join(" ")),
-        build_timestamp: Some(chrono::Utc::now().to_rfc3339()),
+        build_timestamp: Some(rfc3339_now()),
     });
 
     let out_path = format!("{}.fm", output);

@@ -51,9 +51,14 @@ pub fn classify_alignments(candidates: &[AlignCandidate]) -> Vec<(usize, Alignme
 
     for (idx, cand) in candidates.iter().enumerate().skip(1) {
         // Check if this alignment overlaps with any primary/supplementary alignment
-        let overlaps = covered_ranges
-            .iter()
-            .any(|(start, end)| !(cand.query_end <= *start || cand.query_start >= *end));
+        let overlaps = covered_ranges.iter().any(|&(start, end)| {
+            let c = AlignCandidate {
+                query_start: start,
+                query_end: end,
+                ..cand.clone()
+            };
+            !are_non_overlapping(cand, &c)
+        });
 
         if overlaps {
             result.push((idx, AlignmentType::Secondary));
@@ -73,16 +78,20 @@ pub fn classify_alignments(candidates: &[AlignCandidate]) -> Vec<(usize, Alignme
 ///
 /// For a primary alignment, SA:Z lists all supplementaries.
 /// For a supplementary alignment, SA:Z lists the primary + all other supplementaries.
+///
+/// `emitted` 标记哪些候选实际被输出（受 score_threshold / max_aln 截断）；
+/// 只引用实际输出的候选，避免 SA:Z 指向未输出的比对。
 pub fn generate_sa_tag(
     current_idx: usize,
     candidates: &[AlignCandidate],
     classification: &[(usize, AlignmentType)],
+    emitted: &[bool],
 ) -> String {
     let mut entries: Vec<String> = Vec::new();
 
     for &(idx, align_type) in classification {
-        // Skip the current alignment and secondary alignments
-        if idx == current_idx || align_type == AlignmentType::Secondary {
+        // Skip the current alignment, secondary alignments, and unemitted alignments
+        if idx == current_idx || align_type == AlignmentType::Secondary || !emitted.get(idx).copied().unwrap_or(false) {
             continue;
         }
 
@@ -237,9 +246,10 @@ mod tests {
             make_candidate(45, 30, 50, true, "chr2", 200),
         ];
         let classification = vec![(0, AlignmentType::Primary), (1, AlignmentType::Supplementary)];
+        let emitted = vec![true, true];
 
         // SA:Z for primary should list the supplementary
-        let sa = generate_sa_tag(0, &candidates, &classification);
+        let sa = generate_sa_tag(0, &candidates, &classification, &emitted);
         assert!(sa.contains("chr2"));
         assert!(sa.contains(','));
         assert!(sa.ends_with(';'));
@@ -252,9 +262,10 @@ mod tests {
             make_candidate(45, 30, 50, true, "chr2", 200),
         ];
         let classification = vec![(0, AlignmentType::Primary), (1, AlignmentType::Supplementary)];
+        let emitted = vec![true, true];
 
         // SA:Z for supplementary should list the primary
-        let sa = generate_sa_tag(1, &candidates, &classification);
+        let sa = generate_sa_tag(1, &candidates, &classification, &emitted);
         assert!(sa.contains("chr1"));
         assert!(sa.ends_with(';'));
     }
@@ -263,9 +274,25 @@ mod tests {
     fn test_generate_sa_tag_empty() {
         let candidates = vec![make_candidate(50, 0, 20, false, "chr1", 100)];
         let classification = vec![(0, AlignmentType::Primary)];
+        let emitted = vec![true];
 
         // SA:Z for single alignment should be empty
-        let sa = generate_sa_tag(0, &candidates, &classification);
+        let sa = generate_sa_tag(0, &candidates, &classification, &emitted);
+        assert!(sa.is_empty());
+    }
+
+    #[test]
+    fn test_generate_sa_tag_skips_unemitted() {
+        // 候选 1 被分类为 supplementary 但未实际输出（emitted=false），
+        // SA:Z 不应引用它
+        let candidates = vec![
+            make_candidate(50, 0, 20, false, "chr1", 100),
+            make_candidate(45, 30, 50, true, "chr2", 200),
+        ];
+        let classification = vec![(0, AlignmentType::Primary), (1, AlignmentType::Supplementary)];
+        let emitted = vec![true, false];
+
+        let sa = generate_sa_tag(0, &candidates, &classification, &emitted);
         assert!(sa.is_empty());
     }
 }

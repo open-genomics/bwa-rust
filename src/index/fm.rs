@@ -1,10 +1,33 @@
+use std::io::{Read, Write};
 use std::path::Path;
 
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 
+use crate::error::BwaError;
+
 const FM_MAGIC: u64 = 0x424D_4146_4D5F_5253; // "BWAFM_RS"
-const FM_VERSION: u32 = 2;
+const FM_VERSION: u32 = 3;
+
+/// `.fm` 文件头：magic/version 作为独立前缀写在 bincode 载荷之前，
+/// 使格式错误（坏 magic、坏版本）无需反序列化即可被识别。
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+struct FileHeader {
+    magic: u64,
+    version: u32,
+    /// 载荷（bincode 序列化的 `FmBody`）的 FNV-1a 64 位校验和，
+    /// 用于检测位翻转等静默损坏。
+    checksum: u64,
+}
+
+fn fnv1a64(data: &[u8]) -> u64 {
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    for &b in data {
+        hash ^= b as u64;
+        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    hash
+}
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct IndexMeta {
@@ -31,79 +54,98 @@ pub struct Contig {
 /// - 比对时需要参考序列进行 Smith-Waterman 扩展
 /// - 从 BWT 重建文本的开销远大于保存原始文本
 /// - 未来可考虑压缩存储或按需加载
+///
+/// # 不变量
+///
+/// - `bwt`/`sa` 与 `text` 长度一致
+/// - contig 偏移连续且不越界（`validate` 在加载时校验）
+/// - 内部字段私有，构造必须经过 [`FMIndex::build`]；直接操作内部字段可能破坏上述不变量
 #[derive(Debug, Serialize, Deserialize)]
 pub struct FMIndex {
-    pub magic: u64,
-    pub version: u32,
-    pub sigma: u8,
-    pub block: u32,
+    magic: u64,
+    version: u32,
+    sigma: u8,
+    block: u32,
     /// C\[i\] = 文本中字母 < i 的累计数量
-    pub c: Vec<u32>,
+    c: Vec<u32>,
     /// BWT 序列（与 SA 同长度）
-    pub bwt: Vec<u8>,
+    bwt: Vec<u8>,
     /// Occ 采样（按块存储，行优先展平）：occ_samples[block_id * sigma + c]
-    pub occ_samples: Vec<u32>,
+    occ_samples: Vec<u32>,
     /// SA（完整或稀疏采样）
-    pub sa: Vec<u32>,
+    sa: Vec<u32>,
     /// 稀疏 SA 采样间隔（0 表示完整 SA）
-    pub sa_sample_rate: u32,
+    sa_sample_rate: u32,
     /// contig 元信息（名称、长度、起始偏移）
-    pub contigs: Vec<Contig>,
+    contigs: Vec<Contig>,
     /// 原始文本（数值化字母表，包含 contig 间的 0 分隔符）
     ///
     /// # 用途
     /// 比对时需要恢复参考序列进行 SW 扩展。虽然占用 O(n) 空间，
     /// 但避免了从 BWT 重建的 O(n) 时间开销。
-    pub text: Vec<u8>,
+    text: Vec<u8>,
     /// 可选的构建元数据
-    pub meta: Option<IndexMeta>,
+    meta: Option<IndexMeta>,
 }
 
 impl FMIndex {
-    pub fn build(text: Vec<u8>, bwt: Vec<u8>, sa: Vec<u32>, contigs: Vec<Contig>, sigma: u8, block: usize) -> Self {
-        assert!(block > 0, "block size must be greater than zero");
-        let n = bwt.len();
-        let sigma_us = sigma as usize;
-        assert!(sigma_us > 0, "sigma must be greater than zero");
-        assert_eq!(bwt.len(), text.len(), "BWT/text length mismatch");
-        assert_eq!(sa.len(), text.len(), "SA/text length mismatch");
+    pub fn build(
+        text: Vec<u8>,
+        bwt: Vec<u8>,
+        sa: Vec<u32>,
+        contigs: Vec<Contig>,
+        sigma: u8,
+        block: usize,
+    ) -> Result<Self> {
+        if block == 0 {
+            return Err(anyhow!("block size must be greater than zero"));
+        }
+        if sigma == 0 {
+            return Err(anyhow!("sigma must be greater than zero"));
+        }
+        if bwt.len() != text.len() {
+            return Err(anyhow!("BWT/text length mismatch"));
+        }
+        if sa.len() != text.len() {
+            return Err(anyhow!("SA/text length mismatch"));
+        }
         // 计算 C 表
-        let mut freq = vec![0u32; sigma_us];
+        let mut freq = vec![0u32; sigma as usize];
         for &ch in &bwt {
             let ci = ch as usize;
-            if ci < sigma_us {
+            if ci < sigma as usize {
                 freq[ci] += 1;
             }
         }
-        let mut c = vec![0u32; sigma_us];
+        let mut c = vec![0u32; sigma as usize];
         let mut acc = 0u32;
-        for i in 0..sigma_us {
+        for i in 0..sigma as usize {
             c[i] = acc;
             acc += freq[i];
         }
 
         // 采样 Occ
         let block_u = block as u32;
-        let num_blocks = if n == 0 { 0 } else { n.div_ceil(block) };
-        let mut occ_samples = vec![0u32; num_blocks * sigma_us];
-        let mut running = vec![0u32; sigma_us];
+        let num_blocks = if bwt.is_empty() { 0 } else { bwt.len().div_ceil(block) };
+        let mut occ_samples = vec![0u32; num_blocks * sigma as usize];
+        let mut running = vec![0u32; sigma as usize];
         for bi in 0..num_blocks {
             // 记录到块起始位置的累计
-            for a in 0..sigma_us {
-                occ_samples[bi * sigma_us + a] = running[a];
+            for a in 0..sigma as usize {
+                occ_samples[bi * sigma as usize + a] = running[a];
             }
             // 扫描本块内容，更新 running
             let start = bi * block;
-            let end = ((bi + 1) * block).min(n);
+            let end = ((bi + 1) * block).min(bwt.len());
             for &ch in &bwt[start..end] {
                 let ci = ch as usize;
-                if ci < sigma_us {
+                if ci < sigma as usize {
                     running[ci] += 1;
                 }
             }
         }
 
-        Self {
+        Ok(Self {
             magic: FM_MAGIC,
             version: FM_VERSION,
             sigma,
@@ -116,7 +158,7 @@ impl FMIndex {
             contigs,
             text,
             meta: None,
-        }
+        })
     }
 
     /// 构建使用稀疏 SA 采样的 FM 索引
@@ -128,12 +170,12 @@ impl FMIndex {
         sigma: u8,
         block: usize,
         sa_rate: u32,
-    ) -> Self {
-        let mut fm = Self::build(text, bwt, sa, contigs, sigma, block);
+    ) -> Result<Self> {
+        let mut fm = Self::build(text, bwt, sa, contigs, sigma, block)?;
         if sa_rate > 1 {
             fm.sparsify_sa(sa_rate);
         }
-        fm
+        Ok(fm)
     }
 
     /// 将完整 SA 转换为稀疏采样
@@ -168,6 +210,69 @@ impl FMIndex {
 
     pub fn set_meta(&mut self, meta: IndexMeta) {
         self.meta = Some(meta);
+    }
+
+    pub fn sigma(&self) -> u8 {
+        self.sigma
+    }
+
+    pub fn block_size(&self) -> u32 {
+        self.block
+    }
+
+    pub fn c_table(&self) -> &[u32] {
+        &self.c
+    }
+
+    pub fn bwt(&self) -> &[u8] {
+        &self.bwt
+    }
+
+    pub fn occ_samples(&self) -> &[u32] {
+        &self.occ_samples
+    }
+
+    pub fn sa(&self) -> &[u32] {
+        &self.sa
+    }
+
+    pub fn sa_sample_rate(&self) -> u32 {
+        self.sa_sample_rate
+    }
+
+    pub fn contigs(&self) -> &[Contig] {
+        &self.contigs
+    }
+
+    pub fn text(&self) -> &[u8] {
+        &self.text
+    }
+
+    pub fn meta(&self) -> Option<&IndexMeta> {
+        self.meta.as_ref()
+    }
+
+    pub fn version(&self) -> u32 {
+        self.version
+    }
+
+    /// 解码并返回指定 contig 的完整参考序列（内部字母表 → ASCII）。
+    ///
+    /// 返回 `None` 当 contig 索引越界或区间超出文本范围（正常情况下不会发生，
+    /// 因为加载时已校验；此处防御性检查用于库消费者手工构造的场景）。
+    pub fn contig_sequence(&self, ci: usize) -> Option<Vec<u8>> {
+        let contig = self.contigs.get(ci)?;
+        let start = contig.offset as usize;
+        let end = start.checked_add(contig.len as usize)?;
+        if end > self.text.len() {
+            return None;
+        }
+        Some(
+            self.text[start..end]
+                .iter()
+                .map(|&code| crate::util::dna::from_alphabet(code))
+                .collect(),
+        )
     }
 
     fn validate(&self) -> Result<()> {
@@ -286,28 +391,51 @@ impl FMIndex {
     }
 
     pub fn save_to_file(&self, path: impl AsRef<Path>) -> Result<()> {
+        let body = bincode::serialize(self).map_err(|e| anyhow!("cannot serialize FM index: {}", e))?;
+        let header = FileHeader {
+            magic: FM_MAGIC,
+            version: FM_VERSION,
+            checksum: fnv1a64(&body),
+        };
+        let mut header_bytes = bincode::serialize(&header).map_err(|e| anyhow!("cannot serialize FM header: {}", e))?;
         let mut f = std::fs::File::create(path)?;
-        bincode::serialize_into(&mut f, self)?;
+        f.write_all(&header_bytes)?;
+        header_bytes.clear();
+        f.write_all(&body)?;
+        f.flush()?;
         Ok(())
     }
 
     pub fn load_from_file(path: impl AsRef<Path>) -> Result<Self> {
-        let f = std::fs::File::open(path.as_ref())?;
-        let idx: Self = bincode::deserialize_from(f)?;
-        if idx.magic != FM_MAGIC {
-            return Err(anyhow!(
-                "invalid FM index file: bad magic number (expected 0x{:016X}, got 0x{:016X})",
-                FM_MAGIC,
-                idx.magic
-            ));
+        let mut f = std::fs::File::open(path.as_ref())?;
+        let header: FileHeader = bincode::deserialize_from(&mut f)
+            .map_err(|_| BwaError::IndexFormat("not a bwa-rust FM index (missing or corrupt header)".into()))?;
+        if header.magic != FM_MAGIC {
+            return Err(BwaError::IndexFormat(format!(
+                "bad magic number (expected 0x{:016X}, got 0x{:016X})",
+                FM_MAGIC, header.magic
+            ))
+            .into());
         }
-        if idx.version != FM_VERSION && idx.version != 1 {
-            return Err(anyhow!(
-                "unsupported FM index version: expected {} (or 1), got {}",
-                FM_VERSION,
-                idx.version
-            ));
+        if header.version != FM_VERSION {
+            return Err(BwaError::IndexFormat(format!(
+                "unsupported FM index version: expected {}, got {}",
+                FM_VERSION, header.version
+            ))
+            .into());
         }
+        let mut body = Vec::new();
+        f.read_to_end(&mut body)?;
+        let actual = fnv1a64(&body);
+        if actual != header.checksum {
+            return Err(BwaError::IndexFormat(format!(
+                "checksum mismatch: file is corrupt (expected {:016X}, got {:016X})",
+                header.checksum, actual
+            ))
+            .into());
+        }
+        let idx: Self = bincode::deserialize(&body)
+            .map_err(|e| BwaError::IndexFormat(format!("cannot deserialize FM index body: {}", e)))?;
         idx.validate()?;
         Ok(idx)
     }
@@ -374,7 +502,7 @@ mod tests {
         text.push(0); // sentinel
         let sa_arr = sa::build_sa(&text);
         let bwt_arr = bwt::build_bwt(&text, &sa_arr);
-        FMIndex::build(text, bwt_arr, sa_arr, contigs, 6, 4)
+        FMIndex::build(text, bwt_arr, sa_arr, contigs, 6, 4).unwrap()
     }
 
     #[test]
@@ -448,7 +576,7 @@ mod tests {
         ];
         let sa_arr = sa::build_sa(&text);
         let bwt_arr = bwt::build_bwt(&text, &sa_arr);
-        let fm = FMIndex::build(text, bwt_arr, sa_arr, contigs, 6, 4);
+        let fm = FMIndex::build(text, bwt_arr, sa_arr, contigs, 6, 4).unwrap();
 
         assert_eq!(fm.map_text_pos(0), Some((0, 0)));
         assert_eq!(fm.map_text_pos(2), Some((0, 2)));
@@ -493,7 +621,7 @@ mod tests {
         let sa_arr = sa::build_sa(&text);
         let bwt_arr = bwt::build_bwt(&text, &sa_arr);
         let full_sa = sa_arr.clone();
-        let fm = FMIndex::build_sparse(text.clone(), bwt_arr, sa_arr, contigs, 6, 4, 4);
+        let fm = FMIndex::build_sparse(text.clone(), bwt_arr, sa_arr, contigs, 6, 4, 4).unwrap();
         assert_eq!(fm.sa_sample_rate, 4);
         // Verify sa_value recovers correct positions via LF-mapping
         for (i, &sa_value) in full_sa.iter().enumerate() {
@@ -513,7 +641,7 @@ mod tests {
         text.push(0);
         let sa_arr = sa::build_sa(&text);
         let bwt_arr = bwt::build_bwt(&text, &sa_arr);
-        let fm = FMIndex::build_sparse(text, bwt_arr, sa_arr, contigs, 6, 4, 2);
+        let fm = FMIndex::build_sparse(text, bwt_arr, sa_arr, contigs, 6, 4, 2).unwrap();
         let res = fm.backward_search(&[1, 2, 3]);
         assert!(res.is_some());
         let (l, r) = res.unwrap();
@@ -593,7 +721,6 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "block size must be greater than zero")]
     fn fm_build_rejects_zero_block_size() {
         let text = vec![1u8, 2, 3, 4, 0];
         let sa_arr = sa::build_sa(&text);
@@ -603,7 +730,7 @@ mod tests {
             len: 4,
             offset: 0,
         }];
-        let _ = FMIndex::build(text, bwt_arr, sa_arr, contigs, 6, 0);
+        assert!(FMIndex::build(text, bwt_arr, sa_arr, contigs, 6, 0).is_err());
     }
 
     #[test]
@@ -628,5 +755,58 @@ mod tests {
         let err = FMIndex::load_from_file(path).unwrap_err();
         assert!(err.to_string().contains("occ_samples"));
         std::fs::remove_file(path).ok();
+    }
+
+    #[test]
+    fn fm_load_rejects_truncated_file() {
+        let fm = build_toy_fm(&[1, 2, 3, 4]);
+        let tmp = std::env::temp_dir().join("bwa_rust_test_fm_truncated.fm");
+        let path = tmp.to_str().unwrap();
+        fm.save_to_file(path).unwrap();
+        let data = std::fs::read(path).unwrap();
+        std::fs::write(path, &data[..data.len() / 2]).unwrap();
+        let err = FMIndex::load_from_file(path).unwrap_err();
+        assert!(err.to_string().contains("checksum") || err.to_string().contains("deserialize"));
+        std::fs::remove_file(path).ok();
+    }
+
+    #[test]
+    fn fm_load_rejects_random_bytes() {
+        let tmp = std::env::temp_dir().join("bwa_rust_test_fm_random.fm");
+        let path = tmp.to_str().unwrap();
+        std::fs::write(
+            path,
+            b"\x00\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0a\x0b\x0c\x0d\x0e\x0f",
+        )
+        .unwrap();
+        let err = FMIndex::load_from_file(path).unwrap_err();
+        assert!(err.to_string().contains("header") || err.to_string().contains("magic"));
+        std::fs::remove_file(path).ok();
+    }
+
+    #[test]
+    fn fm_load_rejects_flipped_bit_in_payload() {
+        let fm = build_toy_fm(&[1, 2, 3, 4]);
+        let tmp = std::env::temp_dir().join("bwa_rust_test_fm_bitflip.fm");
+        let path = tmp.to_str().unwrap();
+        fm.save_to_file(path).unwrap();
+        let mut data = std::fs::read(path).unwrap();
+        // 翻转载荷中部的一个字节（跳过 16 字节 bincode 头 + 24 字节 FileHeader 之后）
+        let payload_start = 16 + 24;
+        if data.len() > payload_start + 8 {
+            let flip_at = payload_start + 8;
+            data[flip_at] ^= 0x01;
+            std::fs::write(path, &data).unwrap();
+            let err = FMIndex::load_from_file(path).unwrap_err();
+            assert!(err.to_string().contains("checksum"), "unexpected error: {}", err);
+        }
+        std::fs::remove_file(path).ok();
+    }
+
+    #[test]
+    fn fm_contig_sequence_roundtrip() {
+        let fm = build_toy_fm(&[1, 2, 3, 4]);
+        assert_eq!(fm.contig_sequence(0).as_deref(), Some(&b"ACGT"[..]));
+        assert!(fm.contig_sequence(5).is_none());
     }
 }

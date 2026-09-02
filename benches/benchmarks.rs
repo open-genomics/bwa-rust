@@ -29,7 +29,7 @@ fn build_fm_index(seq: &[u8]) -> fm::FMIndex {
     text.push(0);
     let sa_arr = sa::build_sa(&text);
     let bwt_arr = bwt::build_bwt(&text, &sa_arr);
-    fm::FMIndex::build(text, bwt_arr, sa_arr, contigs, dna::SIGMA as u8, 128)
+    fm::FMIndex::build(text, bwt_arr, sa_arr, contigs, dna::SIGMA as u8, 128).unwrap()
 }
 
 fn bench_backward_search(c: &mut Criterion) {

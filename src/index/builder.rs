@@ -5,6 +5,7 @@ use std::path::Path;
 use anyhow::Result;
 
 use super::{bwt, fm, sa};
+use crate::error::BwaError;
 use crate::io::fasta::FastaReader;
 use crate::util::dna;
 
@@ -19,7 +20,7 @@ pub struct IndexBuildResult {
 /// Build an FM index from a buffered FASTA reader
 pub fn build_fm_index<R: BufRead>(reader: R, block_size: usize) -> Result<IndexBuildResult> {
     if block_size == 0 {
-        anyhow::bail!("block size must be greater than zero");
+        return Err(BwaError::IndexBuild("block size must be greater than zero".into()).into());
     }
 
     let mut fasta = FastaReader::new(reader);
@@ -32,21 +33,21 @@ pub fn build_fm_index<R: BufRead>(reader: R, block_size: usize) -> Result<IndexB
 
     while let Some(rec) = fasta.next_record()? {
         if rec.seq.is_empty() {
-            anyhow::bail!("FASTA sequence '{}' is empty", rec.id);
+            return Err(BwaError::IndexBuild(format!("FASTA sequence '{}' is empty", rec.id)).into());
         }
         if !seen_names.insert(rec.id.clone()) {
-            anyhow::bail!("duplicate FASTA sequence name '{}'", rec.id);
+            return Err(BwaError::IndexBuild(format!("duplicate FASTA sequence name '{}'", rec.id)).into());
         }
         n_seqs += 1;
         total_len += rec.seq.len();
         let norm = dna::normalize_seq(&rec.seq);
-        let start =
-            u32::try_from(text.len()).map_err(|_| anyhow::anyhow!("reference text exceeds u32 address space"))?;
+        let start = u32::try_from(text.len())
+            .map_err(|_| BwaError::IndexBuild("reference text exceeds u32 address space".into()))?;
         for b in norm {
             text.push(dna::to_alphabet(b));
         }
-        let text_len_u32 =
-            u32::try_from(text.len()).map_err(|_| anyhow::anyhow!("reference text exceeds u32 address space"))?;
+        let text_len_u32 = u32::try_from(text.len())
+            .map_err(|_| BwaError::IndexBuild("reference text exceeds u32 address space".into()))?;
         let len_u32 = text_len_u32 - start;
         contigs.push(fm::Contig {
             name: rec.id,
@@ -58,15 +59,15 @@ pub fn build_fm_index<R: BufRead>(reader: R, block_size: usize) -> Result<IndexB
     }
 
     if n_seqs == 0 {
-        anyhow::bail!("FASTA contains no sequences");
+        return Err(BwaError::IndexBuild("FASTA contains no sequences".into()).into());
     }
     if total_len == 0 {
-        anyhow::bail!("FASTA contains only empty sequences");
+        return Err(BwaError::IndexBuild("FASTA contains only empty sequences".into()).into());
     }
 
     let sa_arr = sa::build_sa(&text);
     let bwt_arr = bwt::build_bwt(&text, &sa_arr);
-    let fm = fm::FMIndex::build(text, bwt_arr, sa_arr, contigs, dna::SIGMA as u8, block_size);
+    let fm = fm::FMIndex::build(text, bwt_arr, sa_arr, contigs, dna::SIGMA as u8, block_size)?;
 
     Ok(IndexBuildResult { fm, n_seqs, total_len })
 }
@@ -91,9 +92,9 @@ mod tests {
         let result = build_fm_index(cursor, 4).unwrap();
         assert_eq!(result.n_seqs, 2);
         assert_eq!(result.total_len, 12);
-        assert_eq!(result.fm.contigs.len(), 2);
-        assert_eq!(result.fm.contigs[0].name, "chr1");
-        assert_eq!(result.fm.contigs[1].name, "chr2");
+        assert_eq!(result.fm.contigs().len(), 2);
+        assert_eq!(result.fm.contigs()[0].name, "chr1");
+        assert_eq!(result.fm.contigs()[1].name, "chr2");
     }
 
     #[test]
@@ -110,10 +111,10 @@ mod tests {
         let result = build_fm_index(cursor, 4).unwrap();
         assert_eq!(result.n_seqs, 1);
         assert_eq!(result.total_len, 8);
-        assert_eq!(result.fm.contigs.len(), 1);
-        assert_eq!(result.fm.contigs[0].name, "seq1");
-        assert_eq!(result.fm.contigs[0].len, 8);
-        assert_eq!(result.fm.contigs[0].offset, 0);
+        assert_eq!(result.fm.contigs().len(), 1);
+        assert_eq!(result.fm.contigs()[0].name, "seq1");
+        assert_eq!(result.fm.contigs()[0].len, 8);
+        assert_eq!(result.fm.contigs()[0].offset, 0);
     }
 
     #[test]
@@ -123,14 +124,14 @@ mod tests {
         let result = build_fm_index(cursor, 4).unwrap();
         assert_eq!(result.n_seqs, 3);
         assert_eq!(result.total_len, 10);
-        assert_eq!(result.fm.contigs[0].offset, 0);
-        assert_eq!(result.fm.contigs[0].len, 4);
+        assert_eq!(result.fm.contigs()[0].offset, 0);
+        assert_eq!(result.fm.contigs()[0].len, 4);
         // c2 starts after c1 + sentinel
-        assert_eq!(result.fm.contigs[1].offset, 5);
-        assert_eq!(result.fm.contigs[1].len, 4);
+        assert_eq!(result.fm.contigs()[1].offset, 5);
+        assert_eq!(result.fm.contigs()[1].len, 4);
         // c3 starts after c2 + sentinel
-        assert_eq!(result.fm.contigs[2].offset, 10);
-        assert_eq!(result.fm.contigs[2].len, 2);
+        assert_eq!(result.fm.contigs()[2].offset, 10);
+        assert_eq!(result.fm.contigs()[2].len, 2);
     }
 
     #[test]
@@ -139,9 +140,9 @@ mod tests {
         let cursor = Cursor::new(&data[..]);
         let result = build_fm_index(cursor, 4).unwrap();
         let fm = &result.fm;
-        let offset = fm.contigs[0].offset as usize;
-        let len = fm.contigs[0].len as usize;
-        let recovered: Vec<u8> = fm.text[offset..offset + len].iter().map(|&c| dna::from_alphabet(c)).collect();
+        let offset = fm.contigs()[0].offset as usize;
+        let len = fm.contigs()[0].len as usize;
+        let recovered: Vec<u8> = fm.text()[offset..offset + len].iter().map(|&c| dna::from_alphabet(c)).collect();
         assert_eq!(recovered, b"ACGTN");
     }
 

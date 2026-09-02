@@ -24,7 +24,7 @@ fn build_fm_from_seq(seq: &[u8]) -> FMIndex {
     text.push(0);
     let sa_arr = sa::build_sa(&text);
     let bwt_arr = bwt::build_bwt(&text, &sa_arr);
-    FMIndex::build(text, bwt_arr, sa_arr, contigs, dna::SIGMA as u8, 16)
+    FMIndex::build(text, bwt_arr, sa_arr, contigs, dna::SIGMA as u8, 16).unwrap()
 }
 
 /// 辅助函数：从多条序列构建 FM 索引
@@ -41,9 +41,9 @@ fn e2e_build_index_and_exact_search() {
     let fasta = b">chr1\nACGTACGTACGTACGTACGT\n>chr2\nGGCCAATTGGCCAATT\n";
     let fm = build_fm_from_fasta_str(fasta);
 
-    assert_eq!(fm.contigs.len(), 2);
-    assert_eq!(fm.contigs[0].name, "chr1");
-    assert_eq!(fm.contigs[1].name, "chr2");
+    assert_eq!(fm.contigs().len(), 2);
+    assert_eq!(fm.contigs()[0].name, "chr1");
+    assert_eq!(fm.contigs()[1].name, "chr2");
 
     // 在 chr1 中精确搜索
     let pat: Vec<u8> = b"ACGTACGT".iter().map(|&b| dna::to_alphabet(b)).collect();
@@ -82,7 +82,7 @@ fn e2e_seed_chain_align_exact() {
     assert!(!chains.is_empty());
 
     // SW 对齐
-    let ref_seq: Vec<u8> = fm.text[..fm.contigs[0].len as usize]
+    let ref_seq: Vec<u8> = fm.text()[..fm.contigs()[0].len as usize]
         .iter()
         .map(|&c| dna::from_alphabet(c))
         .collect();
@@ -116,7 +116,7 @@ fn e2e_seed_chain_align_with_mismatch() {
         // 过滤弱链：保留得分 >= 最佳得分 * 0.3 的链
         filter_chains(&mut chains, 0.3);
         if !chains.is_empty() {
-            let ref_seq: Vec<u8> = fm.text[..fm.contigs[0].len as usize]
+            let ref_seq: Vec<u8> = fm.text()[..fm.contigs()[0].len as usize]
                 .iter()
                 .map(|&c| dna::from_alphabet(c))
                 .collect();
@@ -161,7 +161,9 @@ fn e2e_sam_output_format() {
     sam::write_header(&mut buf, &contigs).unwrap();
 
     let unmapped = sam::format_unmapped("read1", "ACGTACGT", "IIIIIIII");
-    let mapped = sam::format_record("read2", 0, "chr1", 100, 60, "8M", "ACGTACGT", "IIIIIIII", 16, 0, 0);
+    let mapped = sam::format_record_with_optional_tags(
+        "read2", 0, "chr1", 100, 60, "8M", "ACGTACGT", "IIIIIIII", 16, 0, 0, "", "",
+    );
 
     // 验证 SAM 格式正确性
     let header = String::from_utf8(buf).unwrap();

@@ -110,29 +110,16 @@ pub fn banded_sw(query: &[u8], reference: &[u8], p: SwParams) -> SwResult {
     banded_sw_with_buf(query, reference, p, &mut SwBuffer::new())
 }
 
-/// 端到端全覆盖比对。
-/// 用于链内两个锚点之间的 gap 补齐，必须同时覆盖完整 query/reference 片段。
-pub fn global_align(query: &[u8], reference: &[u8], p: SwParams) -> SwResult {
-    global_align_with_buf(query, reference, p, &mut SwBuffer::new())
-}
-
-/// 同 [`global_align`]，但接受外部 [`SwBuffer`] 复用内存。
-pub fn global_align_with_buf(query: &[u8], reference: &[u8], p: SwParams, buf: &mut SwBuffer) -> SwResult {
+/// global / semiglobal 共享的 DP 填充：首列 gap 初始化、首行初始化、核心三状态填充。
+///
+/// 两者的矩阵填充逻辑逐字相同，仅首行策略不同：
+/// - `ref_free == false`（global）：首行强制 gap 惩罚（ref 前缀必须被覆盖）
+/// - `ref_free == true`（semiglobal）：首行自由置 0（ref 前缀免费裁剪）
+///
+/// 终点选取与回溯由调用方各自完成（global 取 (m,n)，semiglobal 扫末行取最优）。
+fn fill_gs_traces(query: &[u8], reference: &[u8], p: SwParams, buf: &mut SwBuffer, ref_free: bool) {
     let m = query.len();
     let n = reference.len();
-
-    if m == 0 && n == 0 {
-        return SwResult {
-            score: 0,
-            query_start: 0,
-            query_end: 0,
-            ref_start: 0,
-            ref_end: 0,
-            cigar: String::new(),
-            nm: 0,
-        };
-    }
-
     let cols = n + 1;
     let size = (m + 1) * cols;
     buf.resize_affine(size);
@@ -145,7 +132,26 @@ pub fn global_align_with_buf(query: &[u8], reference: &[u8], p: SwParams, buf: &
 
     let idx = |i: usize, j: usize| i * cols + j;
 
-    match_mat[idx(0, 0)] = 0;
+    if ref_free {
+        for j in 0..=n {
+            match_mat[idx(0, j)] = 0;
+        }
+    } else {
+        match_mat[idx(0, 0)] = 0;
+        for j in 1..=n {
+            let cur = idx(0, j);
+            let prev = idx(0, j - 1);
+            let open = penalize(match_mat[prev], p.gap_open + p.gap_extend);
+            let extend = penalize(del_mat[prev], p.gap_extend);
+            if open >= extend {
+                del_mat[cur] = open;
+                del_trace[cur] = trace_to_u8(TraceState::Match);
+            } else {
+                del_mat[cur] = extend;
+                del_trace[cur] = trace_to_u8(TraceState::Del);
+            }
+        }
+    }
 
     for i in 1..=m {
         let cur = idx(i, 0);
@@ -158,20 +164,6 @@ pub fn global_align_with_buf(query: &[u8], reference: &[u8], p: SwParams, buf: &
         } else {
             ins_mat[cur] = extend;
             ins_trace[cur] = trace_to_u8(TraceState::Ins);
-        }
-    }
-
-    for j in 1..=n {
-        let cur = idx(0, j);
-        let prev = idx(0, j - 1);
-        let open = penalize(match_mat[prev], p.gap_open + p.gap_extend);
-        let extend = penalize(del_mat[prev], p.gap_extend);
-        if open >= extend {
-            del_mat[cur] = open;
-            del_trace[cur] = trace_to_u8(TraceState::Match);
-        } else {
-            del_mat[cur] = extend;
-            del_trace[cur] = trace_to_u8(TraceState::Del);
         }
     }
 
@@ -224,6 +216,41 @@ pub fn global_align_with_buf(query: &[u8], reference: &[u8], p: SwParams, buf: &
             }
         }
     }
+}
+
+/// 端到端全覆盖比对。
+/// 用于链内两个锚点之间的 gap 补齐，必须同时覆盖完整 query/reference 片段。
+pub fn global_align(query: &[u8], reference: &[u8], p: SwParams) -> SwResult {
+    global_align_with_buf(query, reference, p, &mut SwBuffer::new())
+}
+
+/// 同 [`global_align`]，但接受外部 [`SwBuffer`] 复用内存。
+pub fn global_align_with_buf(query: &[u8], reference: &[u8], p: SwParams, buf: &mut SwBuffer) -> SwResult {
+    let m = query.len();
+    let n = reference.len();
+
+    if m == 0 && n == 0 {
+        return SwResult {
+            score: 0,
+            query_start: 0,
+            query_end: 0,
+            ref_start: 0,
+            ref_end: 0,
+            cigar: String::new(),
+            nm: 0,
+        };
+    }
+
+    fill_gs_traces(query, reference, p, buf, false);
+
+    let cols = n + 1;
+    let idx = |i: usize, j: usize| i * cols + j;
+    let match_mat = &mut buf.h;
+    let ins_mat = &mut buf.e;
+    let del_mat = &mut buf.f;
+    let match_trace = &mut buf.match_trace;
+    let ins_trace = &mut buf.ins_trace;
+    let del_trace = &mut buf.del_trace;
 
     let end = idx(m, n);
     let mut score = match_mat[end];
@@ -310,85 +337,16 @@ pub fn semiglobal_align_with_buf(query: &[u8], reference: &[u8], p: SwParams, bu
         };
     }
 
+    fill_gs_traces(query, reference, p, buf, true);
+
     let cols = n + 1;
-    let size = (m + 1) * cols;
-    buf.resize_affine(size);
+    let idx = |i: usize, j: usize| i * cols + j;
     let match_mat = &mut buf.h;
     let ins_mat = &mut buf.e;
     let del_mat = &mut buf.f;
     let match_trace = &mut buf.match_trace;
     let ins_trace = &mut buf.ins_trace;
     let del_trace = &mut buf.del_trace;
-
-    let idx = |i: usize, j: usize| i * cols + j;
-
-    for j in 0..=n {
-        match_mat[idx(0, j)] = 0;
-    }
-
-    for i in 1..=m {
-        let cur = idx(i, 0);
-        let prev = idx(i - 1, 0);
-        let open = penalize(match_mat[prev], p.gap_open + p.gap_extend);
-        let extend = penalize(ins_mat[prev], p.gap_extend);
-        if open >= extend {
-            ins_mat[cur] = open;
-            ins_trace[cur] = trace_to_u8(TraceState::Match);
-        } else {
-            ins_mat[cur] = extend;
-            ins_trace[cur] = trace_to_u8(TraceState::Ins);
-        }
-    }
-
-    for i in 1..=m {
-        for j in 1..=n {
-            let cur = idx(i, j);
-            let diag = idx(i - 1, j - 1);
-            let up = idx(i - 1, j);
-            let left = idx(i, j - 1);
-
-            let subst = if query[i - 1] == reference[j - 1] {
-                p.match_score
-            } else {
-                -p.mismatch_penalty
-            };
-
-            let mut best_prev = match_mat[diag];
-            let mut best_state = TraceState::Match;
-            if ins_mat[diag] > best_prev {
-                best_prev = ins_mat[diag];
-                best_state = TraceState::Ins;
-            }
-            if del_mat[diag] > best_prev {
-                best_prev = del_mat[diag];
-                best_state = TraceState::Del;
-            }
-            if best_prev > NEG_INF / 2 {
-                match_mat[cur] = best_prev + subst;
-                match_trace[cur] = trace_to_u8(best_state);
-            }
-
-            let open_ins = penalize(match_mat[up], p.gap_open + p.gap_extend);
-            let extend_ins = penalize(ins_mat[up], p.gap_extend);
-            if open_ins >= extend_ins {
-                ins_mat[cur] = open_ins;
-                ins_trace[cur] = trace_to_u8(TraceState::Match);
-            } else {
-                ins_mat[cur] = extend_ins;
-                ins_trace[cur] = trace_to_u8(TraceState::Ins);
-            }
-
-            let open_del = penalize(match_mat[left], p.gap_open + p.gap_extend);
-            let extend_del = penalize(del_mat[left], p.gap_extend);
-            if open_del >= extend_del {
-                del_mat[cur] = open_del;
-                del_trace[cur] = trace_to_u8(TraceState::Match);
-            } else {
-                del_mat[cur] = extend_del;
-                del_trace[cur] = trace_to_u8(TraceState::Del);
-            }
-        }
-    }
 
     let mut best_j = 0usize;
     let mut score = NEG_INF;
@@ -651,29 +609,9 @@ pub fn banded_sw_with_buf(query: &[u8], reference: &[u8], p: SwParams, buf: &mut
 
     ops.reverse();
 
-    let mut nm = 0u32;
-    let mut qi = query_start;
-    let mut rj = ref_start;
-    for &op in &ops {
-        match op {
-            'M' => {
-                if query[qi] != reference[rj] {
-                    nm += 1;
-                }
-                qi += 1;
-                rj += 1;
-            }
-            'I' => {
-                nm += 1;
-                qi += 1;
-            }
-            'D' => {
-                nm += 1;
-                rj += 1;
-            }
-            _ => {}
-        }
-    }
+    // ops 从 (query_start, ref_start) 出发，消耗恰好覆盖 [query_start, query_end) 与
+    // [ref_start, ref_end)，因此对切片复用统一的 NM 计数即可。
+    let nm = nm_from_ops(&ops, &query[query_start..], &reference[ref_start..]);
 
     let cigar = ops_to_cigar(&ops);
 

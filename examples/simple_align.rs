@@ -5,8 +5,10 @@
 //! cargo run --example simple_align
 //! ```
 
+use std::io::Cursor;
+
 use bwa_rust::align::{self, SwParams};
-use bwa_rust::index::{bwt, fm, sa};
+use bwa_rust::index::builder::build_fm_index;
 use bwa_rust::util::dna;
 
 fn main() {
@@ -15,25 +17,15 @@ fn main() {
     println!("参考序列: {}", std::str::from_utf8(reference).unwrap());
     println!("参考长度: {} bp", reference.len());
 
-    // 2. 构建 FM 索引
-    let norm = dna::normalize_seq(reference);
-    let mut text: Vec<u8> = norm.iter().map(|&b| dna::to_alphabet(b)).collect();
-    let len = text.len() as u32;
-    let contigs = vec![fm::Contig {
-        name: "ref1".to_string(),
-        len,
-        offset: 0,
-    }];
-    text.push(0); // sentinel
-
-    let sa_arr = sa::build_sa(&text);
-    let bwt_arr = bwt::build_bwt(&text, &sa_arr);
-    let fm_idx = fm::FMIndex::build(text, bwt_arr, sa_arr, contigs, dna::SIGMA as u8, 16);
+    // 2. 通过 FASTA 构建 FM 索引（推荐路径，内部布局由库管理）
+    let fasta = format!(">ref1\n{}\n", std::str::from_utf8(reference).unwrap());
+    let result = build_fm_index(Cursor::new(fasta.as_bytes()), 16).unwrap();
+    let fm_idx = result.fm;
 
     println!(
         "FM 索引构建完成：BWT 长度={}, SA 长度={}",
-        fm_idx.bwt.len(),
-        fm_idx.sa.len()
+        fm_idx.bwt().len(),
+        fm_idx.sa().len()
     );
 
     // 3. 精确匹配搜索
@@ -49,7 +41,7 @@ fn main() {
         );
         for pos in &positions {
             if let Some((ci, off)) = fm_idx.map_text_pos(*pos) {
-                println!("  contig={}, offset={}", fm_idx.contigs[ci].name, off);
+                println!("  contig={}, offset={}", fm_idx.contigs()[ci].name, off);
             }
         }
     }
@@ -59,7 +51,7 @@ fn main() {
     let read_norm = dna::normalize_seq(read);
     let read_alpha: Vec<u8> = read_norm.iter().map(|&b| dna::to_alphabet(b)).collect();
 
-    let seeds = align::find_smem_seeds(&fm_idx, &read_alpha, 5);
+    let seeds = align::find_smem_seeds_with_max_occ(&fm_idx, &read_alpha, 5, 500);
     println!("\nSMEM 种子（read='{}'）:", std::str::from_utf8(read).unwrap());
     for s in &seeds {
         println!(
@@ -91,7 +83,7 @@ fn main() {
 
     // 6. 种子链构建
     if !seeds.is_empty() {
-        let chains = align::build_chains(&seeds, 50);
+        let chains = align::build_chains_with_limit(&seeds, 50, 5);
         println!("\n构建了 {} 条种子链:", chains.len());
         for (i, ch) in chains.iter().enumerate() {
             println!(

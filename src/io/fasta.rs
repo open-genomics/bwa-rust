@@ -1,5 +1,7 @@
-use anyhow::{anyhow, Result};
 use std::io::BufRead;
+
+use crate::error::BwaError;
+use crate::error::BwaResult;
 
 #[derive(Debug, Clone)]
 pub struct FastaRecord {
@@ -25,7 +27,7 @@ impl<R: BufRead> FastaReader<R> {
         }
     }
 
-    pub fn next_record(&mut self) -> Result<Option<FastaRecord>> {
+    pub fn next_record(&mut self) -> BwaResult<Option<FastaRecord>> {
         if self.done {
             return Ok(None);
         }
@@ -52,7 +54,7 @@ impl<R: BufRead> FastaReader<R> {
         let mut parts = header.splitn(2, char::is_whitespace);
         let id = parts.next().unwrap_or("").to_string();
         if id.is_empty() {
-            return Err(anyhow!("FASTA header missing sequence name"));
+            return Err(BwaError::Parse("FASTA header missing sequence name".into()));
         }
         let desc = parts.next().map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
 

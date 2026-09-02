@@ -78,6 +78,13 @@ FASTA/FASTQ -> FM-index -> SMEM seeds -> chains -> Smith-Waterman -> SAM
 - `src/align/`：种子、链、延伸、MAPQ、补充比对分类、流水线。
 - `src/io/`：FASTA、FASTQ、SAM 解析与格式化。
 - `src/util/dna.rs`：DNA 归一化、字母表映射、反向互补。
+- `src/error.rs`：库级结构化错误类型（`BwaError`），供库模式调用方编程式处理。
+
+## 索引文件格式
+
+`.fm` 文件由两部分组成：固定前缀头（magic `BWAFM_RS`、版本号、FNV-1a 校验和）
+加 bincode 序列化的索引载荷。加载时先校验头（坏 magic / 版本 / 校验和不匹配会给出
+明确错误，无需反序列化即可识别损坏），再做结构校验。旧版本（v1/v2）索引需重新构建。
 
 ## 开发
 

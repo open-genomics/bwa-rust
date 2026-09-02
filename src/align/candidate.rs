@@ -1,14 +1,38 @@
 use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 
-use crate::index::fm::Contig;
-use crate::index::fm::FMIndex;
-use crate::util::dna;
+use crate::index::fm::{Contig, FMIndex};
 
 use super::extend::chain_to_alignment_with_buf;
 use super::seed::find_smem_seeds_with_max_occ;
 use super::sw::{self, SwBuffer, SwParams, SwResult};
 use super::AlignOpt;
 use super::{build_chains_with_limit, filter_chains};
+
+/// 线程安全的 contig 参考序列解码缓存。
+///
+/// 整次比对运行共享同一实例：每个 contig 至多解码一次，
+/// 后续所有 read / 链直接复用解码结果，避免热路径上反复执行
+/// 字母表 → ASCII 的全 contig 转换。
+#[derive(Default)]
+pub struct RefSeqCache {
+    decoded: Mutex<HashMap<usize, Arc<Vec<u8>>>>,
+}
+
+impl RefSeqCache {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// 返回指定 contig 的解码序列；首次访问时解码并缓存。
+    fn get(&self, fm: &FMIndex, ci: usize) -> Arc<Vec<u8>> {
+        let mut map = self.decoded.lock().expect("ref seq cache lock poisoned");
+        Arc::clone(
+            map.entry(ci)
+                .or_insert_with(|| Arc::new(fm.contig_sequence(ci).unwrap_or_default())),
+        )
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct AlignCandidate {
@@ -20,7 +44,11 @@ pub struct AlignCandidate {
     pub cigar: String,
     pub nm: u32,
     pub contig_idx: usize,
-    /// Reference sequence segment for MD:Z tag generation (oriented to match query strand)
+    /// Reference sequence segment for MD:Z tag generation。
+    ///
+    /// 注意：该字段按**参考正链方向**存储（非 query 链方向），
+    /// `query_seq` 则按比对链方向存储；两者在 SW 比对的列级对应关系下
+    /// 直接喂给 `generate_md_tag` 即正确（MD:Z 规范要求基于参考正链）。
     pub ref_seq: Vec<u8>,
     /// Query sequence segment (oriented to match the alignment strand)
     pub query_seq: Vec<u8>,
@@ -37,6 +65,7 @@ pub struct AlignCandidate {
 /// - `is_rev`：该 query 是否为反向互补链
 /// - `original_query_len`：原始 query 长度（用于坐标转换）
 /// - `opt`：比对参数（含 `min_seed_len`、`clip_penalty`、`max_occ` 等）
+/// - `ref_cache`：跨调用共享的 contig 解码缓存（同一次比对运行应复用同一实例）
 pub fn collect_candidates(
     fm: &FMIndex,
     query_norm: &[u8],
@@ -45,6 +74,7 @@ pub fn collect_candidates(
     is_rev: bool,
     original_query_len: usize,
     opt: &AlignOpt,
+    ref_cache: &RefSeqCache,
     candidates: &mut Vec<AlignCandidate>,
 ) {
     let len = query_alpha.len();
@@ -67,19 +97,10 @@ pub fn collect_candidates(
 
     let mut sw_buf = SwBuffer::new();
     let mut refine_buf = SwBuffer::new();
-    let mut ref_cache: HashMap<usize, Vec<u8>> = HashMap::new();
 
     for ch in &chains {
         let ci = ch.contig;
-        let contig = &fm.contigs[ci];
-        let ref_seq = ref_cache.entry(ci).or_insert_with(|| {
-            let offset = contig.offset as usize;
-            let contig_len = contig.len as usize;
-            fm.text[offset..offset + contig_len]
-                .iter()
-                .map(|&code| dna::from_alphabet(code))
-                .collect()
-        });
+        let ref_seq = ref_cache.get(fm, ci);
         if ref_seq.is_empty() {
             continue;
         }
@@ -92,6 +113,7 @@ pub fn collect_candidates(
             continue;
         }
 
+        let contig = &fm.contigs()[ci];
         candidates.push(build_candidate(
             contig,
             ci,
@@ -273,6 +295,7 @@ pub fn dedup_candidates(candidates: &mut Vec<AlignCandidate>) {
 mod tests {
     use super::*;
     use crate::testutil::build_test_fm;
+    use crate::util::dna;
 
     fn default_opt() -> AlignOpt {
         AlignOpt::default()
@@ -294,7 +317,8 @@ mod tests {
         };
         let mut candidates = Vec::new();
         let opt = default_opt();
-        collect_candidates(&fm, &norm, &alpha, sw, false, norm.len(), &opt, &mut candidates);
+        let cache = RefSeqCache::new();
+        collect_candidates(&fm, &norm, &alpha, sw, false, norm.len(), &opt, &cache, &mut candidates);
         assert!(!candidates.is_empty());
         assert!(candidates[0].score > 0);
         assert!(candidates[0].cigar.contains('M'));
@@ -317,7 +341,8 @@ mod tests {
         };
         let mut candidates = Vec::new();
         let opt = default_opt();
-        collect_candidates(&fm, &norm, &alpha, sw, false, norm.len(), &opt, &mut candidates);
+        let cache = RefSeqCache::new();
+        collect_candidates(&fm, &norm, &alpha, sw, false, norm.len(), &opt, &cache, &mut candidates);
         assert!(!candidates.is_empty());
         assert!(candidates[0].score > 0);
     }
@@ -334,7 +359,8 @@ mod tests {
         };
         let mut candidates = Vec::new();
         let opt = default_opt();
-        collect_candidates(&fm, &[], &[], sw, false, 0, &opt, &mut candidates);
+        let cache = RefSeqCache::new();
+        collect_candidates(&fm, &[], &[], sw, false, 0, &opt, &cache, &mut candidates);
         assert!(candidates.is_empty());
     }
 

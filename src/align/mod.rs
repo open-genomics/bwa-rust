@@ -7,20 +7,16 @@ pub mod seed;
 pub mod supplementary;
 pub mod sw;
 
-pub use candidate::{collect_candidates, dedup_candidates, AlignCandidate};
-pub use chain::{best_chain, build_chains, build_chains_with_limit, filter_chains, Chain};
+pub use candidate::{collect_candidates, dedup_candidates, AlignCandidate, RefSeqCache};
+pub use chain::{
+    best_chain, build_chains, build_chains_with_limit, filter_chains, Chain, DEFAULT_MAX_CHAINS_PER_CONTIG,
+};
 pub use extend::{chain_to_alignment, chain_to_alignment_with_buf};
 pub use mapq::compute_mapq;
-pub use pipeline::{align_fastq_with_fm_opt, align_fastq_with_opt};
-pub use seed::{find_smem_seeds, find_smem_seeds_with_max_occ, AlnReg, MemSeed};
+pub use pipeline::{align_fastq_with_fm, align_fastq_with_fm_opt, align_fastq_with_opt};
+pub use seed::{find_smem_seeds, find_smem_seeds_with_max_occ, MemSeed, DEFAULT_MAX_OCC};
 pub use supplementary::{are_non_overlapping, classify_alignments, generate_sa_tag, AlignmentType};
-pub use sw::{banded_sw, SwParams, SwResult};
-
-/// Re-export DEFAULT_MAX_OCC from seed module
-pub use seed::DEFAULT_MAX_OCC;
-
-/// Re-export DEFAULT_MAX_CHAINS_PER_CONTIG from chain module
-pub use chain::DEFAULT_MAX_CHAINS_PER_CONTIG;
+pub use sw::{banded_sw, semiglobal_align, SwParams, SwResult};
 
 /// Default maximum alignments output per read
 pub const DEFAULT_MAX_ALIGNMENTS_PER_READ: usize = 5;
@@ -99,6 +95,18 @@ impl AlignOpt {
         if self.max_alignments_per_read == 0 {
             return Err("max_alignments_per_read must be greater than 0");
         }
+        if self.min_seed_len == 0 {
+            return Err("min_seed_len must be greater than 0");
+        }
+        if self.score_threshold <= 0 {
+            return Err("score_threshold must be greater than 0");
+        }
+        if self.zdrop <= 0 {
+            return Err("zdrop must be greater than 0");
+        }
+        if self.max_occ == 0 {
+            return Err("max_occ must be greater than 0");
+        }
         Ok(())
     }
 }
@@ -162,6 +170,42 @@ mod tests {
     fn align_opt_rejects_zero_max_alignments() {
         let opt = AlignOpt {
             max_alignments_per_read: 0,
+            ..AlignOpt::default()
+        };
+        assert!(opt.validate().is_err());
+    }
+
+    #[test]
+    fn align_opt_rejects_zero_min_seed_len() {
+        let opt = AlignOpt {
+            min_seed_len: 0,
+            ..AlignOpt::default()
+        };
+        assert!(opt.validate().is_err());
+    }
+
+    #[test]
+    fn align_opt_rejects_nonpositive_zdrop() {
+        let opt = AlignOpt {
+            zdrop: 0,
+            ..AlignOpt::default()
+        };
+        assert!(opt.validate().is_err());
+    }
+
+    #[test]
+    fn align_opt_rejects_nonpositive_score_threshold() {
+        let opt = AlignOpt {
+            score_threshold: 0,
+            ..AlignOpt::default()
+        };
+        assert!(opt.validate().is_err());
+    }
+
+    #[test]
+    fn align_opt_rejects_zero_max_occ() {
+        let opt = AlignOpt {
+            max_occ: 0,
             ..AlignOpt::default()
         };
         assert!(opt.validate().is_err());

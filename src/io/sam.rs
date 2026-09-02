@@ -39,33 +39,24 @@ pub fn write_header<W: Write, S: AsRef<str>>(out: &mut W, contigs: &[(S, u32)]) 
     Ok(())
 }
 
-/// Format an unmapped SAM record (FLAG=4)
-pub fn format_unmapped(qname: &str, seq: &str, qual: &str) -> String {
-    format!("{}\t4\t*\t0\t0\t*\t*\t0\t0\t{}\t{}", qname, seq, qual,)
-}
-
-/// Format a mapped SAM record with optional tags
-pub fn format_record(
-    qname: &str,
-    flag: u16,
-    rname: &str,
-    pos: u32,
-    mapq: u8,
-    cigar: &str,
-    seq: &str,
-    qual: &str,
-    score: i32,
-    sub_score: i32,
-    nm: u32,
-) -> String {
-    format!(
-        "{}\t{}\t{}\t{}\t{}\t{}\t*\t0\t0\t{}\t{}\tAS:i:{}\tXS:i:{}\tNM:i:{}",
-        qname, flag, rname, pos, mapq, cigar, seq, qual, score, sub_score, nm,
+/// Write an unmapped SAM record (FLAG=UNMAP) to `out`.
+pub fn write_unmapped<W: Write>(out: &mut W, qname: &str, seq: &str, qual: &str) -> std::io::Result<()> {
+    writeln!(
+        out,
+        "{}\t{}\t*\t0\t0\t*\t*\t0\t0\t{}\t{}",
+        qname,
+        flags::UNMAP,
+        seq,
+        qual,
     )
 }
 
-/// Format a mapped SAM record with MD:Z and SA:Z tags
-pub fn format_record_with_md_sa(
+/// Write a mapped SAM record with optional MD:Z / SA:Z tags directly to `out`.
+///
+/// 直接写入目标 writer，避免先构造 String 再复制一次的额外分配。
+#[allow(clippy::too_many_arguments)]
+pub fn write_record<W: Write>(
+    out: &mut W,
     qname: &str,
     flag: u16,
     rname: &str,
@@ -79,20 +70,32 @@ pub fn format_record_with_md_sa(
     nm: u32,
     md_tag: &str,
     sa_tag: &str,
-) -> String {
-    if sa_tag.is_empty() {
-        format!(
-            "{}\t{}\t{}\t{}\t{}\t{}\t*\t0\t0\t{}\t{}\tAS:i:{}\tXS:i:{}\tNM:i:{}\tMD:Z:{}",
-            qname, flag, rname, pos, mapq, cigar, seq, qual, score, sub_score, nm, md_tag,
-        )
-    } else {
-        format!(
-            "{}\t{}\t{}\t{}\t{}\t{}\t*\t0\t0\t{}\t{}\tAS:i:{}\tXS:i:{}\tNM:i:{}\tMD:Z:{}\tSA:Z:{}",
-            qname, flag, rname, pos, mapq, cigar, seq, qual, score, sub_score, nm, md_tag, sa_tag,
-        )
+) -> std::io::Result<()> {
+    write!(
+        out,
+        "{}\t{}\t{}\t{}\t{}\t{}\t*\t0\t0\t{}\t{}\tAS:i:{}\tXS:i:{}\tNM:i:{}",
+        qname, flag, rname, pos, mapq, cigar, seq, qual, score, sub_score, nm,
+    )?;
+    if !md_tag.is_empty() {
+        write!(out, "\tMD:Z:{}", md_tag)?;
     }
+    if !sa_tag.is_empty() {
+        write!(out, "\tSA:Z:{}", sa_tag)?;
+    }
+    writeln!(out)
 }
 
+/// Format an unmapped SAM record (FLAG=UNMAP) as a `String`。
+///
+/// 保留字符串版本供比对管线在批量场景下使用（并行收集后统一写出）。
+pub fn format_unmapped(qname: &str, seq: &str, qual: &str) -> String {
+    format!("{}\t{}\t*\t0\t0\t*\t*\t0\t0\t{}\t{}", qname, flags::UNMAP, seq, qual,)
+}
+
+/// Format a mapped SAM record with optional MD:Z / SA:Z tags as a `String`。
+///
+/// 保留字符串版本供比对管线在批量场景下使用（并行收集后统一写出）。
+#[allow(clippy::too_many_arguments)]
 pub fn format_record_with_optional_tags(
     qname: &str,
     flag: u16,
@@ -108,7 +111,10 @@ pub fn format_record_with_optional_tags(
     md_tag: &str,
     sa_tag: &str,
 ) -> String {
-    let mut line = format_record(qname, flag, rname, pos, mapq, cigar, seq, qual, score, sub_score, nm);
+    let mut line = format!(
+        "{}\t{}\t{}\t{}\t{}\t{}\t*\t0\t0\t{}\t{}\tAS:i:{}\tXS:i:{}\tNM:i:{}",
+        qname, flag, rname, pos, mapq, cigar, seq, qual, score, sub_score, nm,
+    );
     if !md_tag.is_empty() {
         line.push_str("\tMD:Z:");
         line.push_str(md_tag);
@@ -261,7 +267,8 @@ mod tests {
 
     #[test]
     fn record_format() {
-        let line = format_record("read1", 0, "chr1", 100, 60, "50M", "ACGT", "IIII", 100, 0, 2);
+        let line =
+            format_record_with_optional_tags("read1", 0, "chr1", 100, 60, "50M", "ACGT", "IIII", 100, 0, 2, "", "");
         assert!(line.starts_with("read1\t0\tchr1\t100\t60\t50M\t"));
         assert!(line.contains("AS:i:100"));
         assert!(line.contains("NM:i:2"));
@@ -293,7 +300,8 @@ mod tests {
 
     #[test]
     fn record_format_reverse_complement() {
-        let line = format_record("read1", 16, "chr1", 50, 30, "20M", "ACGT", "IIII", 40, 10, 1);
+        let line =
+            format_record_with_optional_tags("read1", 16, "chr1", 50, 30, "20M", "ACGT", "IIII", 40, 10, 1, "", "");
         let fields: Vec<&str> = line.split('\t').collect();
         assert_eq!(fields[1], "16");
         assert!(line.contains("XS:i:10"));
@@ -301,7 +309,9 @@ mod tests {
 
     #[test]
     fn record_format_secondary_alignment() {
-        let line = format_record("read1", 256, "chr2", 200, 0, "10M1I10M", "ACGT", "IIII", 30, 50, 3);
+        let line = format_record_with_optional_tags(
+            "read1", 256, "chr2", 200, 0, "10M1I10M", "ACGT", "IIII", 30, 50, 3, "", "",
+        );
         let fields: Vec<&str> = line.split('\t').collect();
         assert_eq!(fields[1], "256");
         assert_eq!(fields[2], "chr2");
@@ -407,14 +417,15 @@ mod tests {
 
     #[test]
     fn format_record_with_md_tag() {
-        let line = format_record_with_md_sa("read1", 0, "chr1", 100, 60, "50M", "ACGT", "IIII", 100, 0, 2, "50", "");
+        let line =
+            format_record_with_optional_tags("read1", 0, "chr1", 100, 60, "50M", "ACGT", "IIII", 100, 0, 2, "50", "");
         assert!(line.contains("MD:Z:50"));
         assert!(line.contains("AS:i:100"));
     }
 
     #[test]
     fn format_record_with_md_sa_tag() {
-        let line = format_record_with_md_sa(
+        let line = format_record_with_optional_tags(
             "read1",
             0,
             "chr1",

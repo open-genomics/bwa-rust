@@ -1,8 +1,9 @@
-use anyhow::{anyhow, Result};
 use std::io::BufRead;
 
+use crate::error::BwaError;
+use crate::error::BwaResult;
+
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub struct FastqRecord {
     pub id: String,
     pub desc: Option<String>,
@@ -10,25 +11,12 @@ pub struct FastqRecord {
     pub qual: Vec<u8>,
 }
 
-/// A pair of reads from paired-end sequencing.
-#[derive(Debug, Clone)]
-pub struct ReadPair {
-    /// Read name (same for both reads, without /1 or /2 suffix)
-    pub name: String,
-    /// First read sequence
-    pub seq1: Vec<u8>,
-    /// First read quality
-    pub qual1: Vec<u8>,
-    /// Second read sequence
-    pub seq2: Vec<u8>,
-    /// Second read quality
-    pub qual2: Vec<u8>,
-}
-
 pub struct FastqReader<R: BufRead> {
     reader: R,
     buf: String,
     done: bool,
+    /// 已成功读取的记录数（用于错误消息中的位置定位）
+    record_count: u64,
 }
 
 impl<R: BufRead> FastqReader<R> {
@@ -37,10 +25,18 @@ impl<R: BufRead> FastqReader<R> {
             reader,
             buf: String::new(),
             done: false,
+            record_count: 0,
         }
     }
 
-    pub fn next_record(&mut self) -> Result<Option<FastqRecord>> {
+    fn parse_err(&self, message: impl Into<String>) -> BwaError {
+        BwaError::ParseAt {
+            record: self.record_count + 1,
+            message: message.into(),
+        }
+    }
+
+    pub fn next_record(&mut self) -> BwaResult<Option<FastqRecord>> {
         if self.done {
             return Ok(None);
         }
@@ -53,7 +49,7 @@ impl<R: BufRead> FastqReader<R> {
             return Ok(None);
         }
         if !self.buf.starts_with('@') {
-            return Err(anyhow!("FASTQ header not starting with '@'"));
+            return Err(self.parse_err("FASTQ header not starting with '@'"));
         }
         let header = self.buf[1..].trim_end().to_string();
         let mut parts = header.splitn(2, char::is_whitespace);
@@ -64,7 +60,7 @@ impl<R: BufRead> FastqReader<R> {
         self.buf.clear();
         n = self.reader.read_line(&mut self.buf)?;
         if n == 0 {
-            return Err(anyhow!("unexpected EOF after header"));
+            return Err(self.parse_err("unexpected EOF after header"));
         }
         let seq = self.buf.trim_end().as_bytes().to_vec();
 
@@ -72,132 +68,24 @@ impl<R: BufRead> FastqReader<R> {
         self.buf.clear();
         n = self.reader.read_line(&mut self.buf)?;
         if n == 0 || !self.buf.starts_with('+') {
-            return Err(anyhow!("missing '+' line"));
+            return Err(self.parse_err("missing '+' line"));
         }
 
         // quality line
         self.buf.clear();
         n = self.reader.read_line(&mut self.buf)?;
         if n == 0 {
-            return Err(anyhow!("missing quality line"));
+            return Err(self.parse_err("missing quality line"));
         }
         let qual = self.buf.trim_end().as_bytes().to_vec();
 
         // If quality length is shorter than seq (line-wrapped seq not supported here), error
         if qual.len() != seq.len() {
-            return Err(anyhow!("seq/qual length mismatch"));
+            return Err(self.parse_err("seq/qual length mismatch (line-wrapped FASTQ sequences are not supported)"));
         }
 
+        self.record_count += 1;
         Ok(Some(FastqRecord { id, desc, seq, qual }))
-    }
-}
-
-/// Reader for paired-end FASTQ files.
-/// Supports both separate files and interleaved format.
-pub struct PairedFastqReader<R1: BufRead, R2: BufRead> {
-    reader1: FastqReader<R1>,
-    reader2: Option<FastqReader<R2>>,
-    #[allow(dead_code)]
-    buf: String,
-    done: bool,
-}
-
-impl<R1: BufRead, R2: BufRead> PairedFastqReader<R1, R2> {
-    /// Create a reader for two separate FASTQ files.
-    pub fn new_separate(reader1: R1, reader2: R2) -> Self {
-        Self {
-            reader1: FastqReader::new(reader1),
-            reader2: Some(FastqReader::new(reader2)),
-            buf: String::new(),
-            done: false,
-        }
-    }
-
-    /// Create a reader for interleaved FASTQ (reads alternate R1, R2).
-    pub fn new_interleaved(reader: R1) -> Self {
-        Self {
-            reader1: FastqReader::new(reader),
-            reader2: None,
-            buf: String::new(),
-            done: false,
-        }
-    }
-
-    /// Read the next pair of reads.
-    pub fn next_pair(&mut self) -> Result<Option<ReadPair>> {
-        if self.done {
-            return Ok(None);
-        }
-
-        if let Some(ref mut reader2) = self.reader2 {
-            // Separate files mode
-            let rec1 = self.reader1.next_record()?;
-            let rec2 = reader2.next_record()?;
-
-            match (rec1, rec2) {
-                (Some(r1), Some(r2)) => {
-                    // Remove /1 /2 suffixes if present and ensure names match
-                    let name1 = strip_read_suffix(&r1.id);
-                    let name2 = strip_read_suffix(&r2.id);
-
-                    if name1 != name2 {
-                        return Err(anyhow!("read name mismatch: '{}' vs '{}'", name1, name2));
-                    }
-
-                    Ok(Some(ReadPair {
-                        name: name1,
-                        seq1: r1.seq,
-                        qual1: r1.qual,
-                        seq2: r2.seq,
-                        qual2: r2.qual,
-                    }))
-                }
-                (None, None) => {
-                    self.done = true;
-                    Ok(None)
-                }
-                (Some(_), None) => Err(anyhow!("R1 file has more reads than R2")),
-                (None, Some(_)) => Err(anyhow!("R2 file has more reads than R1")),
-            }
-        } else {
-            // Interleaved mode
-            let rec1 = self.reader1.next_record()?;
-            if rec1.is_none() {
-                self.done = true;
-                return Ok(None);
-            }
-            let r1 = rec1.unwrap();
-
-            let rec2 = self.reader1.next_record()?;
-            if rec2.is_none() {
-                return Err(anyhow!("interleaved FASTQ has odd number of reads"));
-            }
-            let r2 = rec2.unwrap();
-
-            let name1 = strip_read_suffix(&r1.id);
-            let name2 = strip_read_suffix(&r2.id);
-
-            if name1 != name2 {
-                return Err(anyhow!("interleaved read name mismatch: '{}' vs '{}'", name1, name2));
-            }
-
-            Ok(Some(ReadPair {
-                name: name1,
-                seq1: r1.seq,
-                qual1: r1.qual,
-                seq2: r2.seq,
-                qual2: r2.qual,
-            }))
-        }
-    }
-}
-
-/// Strip /1 or /2 suffix from read name.
-fn strip_read_suffix(name: &str) -> String {
-    if name.ends_with("/1") || name.ends_with("/2") {
-        name[..name.len() - 2].to_string()
-    } else {
-        name.to_string()
     }
 }
 
@@ -248,7 +136,8 @@ mod tests {
     fn parse_fastq_bad_header() {
         let data = b"ACGT\n+\nIIII\n";
         let mut r = FastqReader::new(Cursor::new(&data[..]));
-        assert!(r.next_record().is_err());
+        let err = r.next_record().unwrap_err();
+        assert!(err.to_string().contains("record 1"));
     }
 
     #[test]
@@ -306,73 +195,13 @@ mod tests {
     }
 
     #[test]
-    fn parse_paired_separate_files() {
-        let data1 = b"@read1/1\nACGT\n+\nIIII\n@read2/1\nGGCC\n+\nHHHH\n";
-        let data2 = b"@read1/2\nTTAA\n+\nIIII\n@read2/2\nCCGG\n+\nHHHH\n";
-
-        let mut r = PairedFastqReader::new_separate(Cursor::new(&data1[..]), Cursor::new(&data2[..]));
-
-        let p1 = r.next_pair().unwrap().unwrap();
-        assert_eq!(p1.name, "read1");
-        assert_eq!(p1.seq1, b"ACGT");
-        assert_eq!(p1.qual1, b"IIII");
-        assert_eq!(p1.seq2, b"TTAA");
-        assert_eq!(p1.qual2, b"IIII");
-
-        let p2 = r.next_pair().unwrap().unwrap();
-        assert_eq!(p2.name, "read2");
-        assert_eq!(p2.seq1, b"GGCC");
-        assert_eq!(p2.seq2, b"CCGG");
-
-        assert!(r.next_pair().unwrap().is_none());
-    }
-
-    #[test]
-    fn parse_paired_interleaved() {
-        let data =
-            b"@read1/1\nACGT\n+\nIIII\n@read1/2\nTTAA\n+\nJJJJ\n@read2/1\nGGCC\n+\nHHHH\n@read2/2\nCCGG\n+\nKKKK\n";
-
-        let mut r: PairedFastqReader<_, std::io::Empty> = PairedFastqReader::new_interleaved(Cursor::new(&data[..]));
-
-        let p1 = r.next_pair().unwrap().unwrap();
-        assert_eq!(p1.name, "read1");
-        assert_eq!(p1.seq1, b"ACGT");
-        assert_eq!(p1.seq2, b"TTAA");
-
-        let p2 = r.next_pair().unwrap().unwrap();
-        assert_eq!(p2.name, "read2");
-        assert_eq!(p2.seq1, b"GGCC");
-        assert_eq!(p2.seq2, b"CCGG");
-
-        assert!(r.next_pair().unwrap().is_none());
-    }
-
-    #[test]
-    fn parse_paired_name_mismatch() {
-        let data1 = b"@read1/1\nACGT\n+\nIIII\n";
-        let data2 = b"@read2/2\nTTAA\n+\nJJJJ\n";
-
-        let mut r = PairedFastqReader::new_separate(Cursor::new(&data1[..]), Cursor::new(&data2[..]));
-
-        assert!(r.next_pair().is_err());
-    }
-
-    #[test]
-    fn parse_paired_r1_has_more_reads() {
-        let data1 = b"@read1/1\nACGT\n+\nIIII\n@read2/1\nGGCC\n+\nHHHH\n";
-        let data2 = b"@read1/2\nTTAA\n+\nJJJJ\n";
-
-        let mut r = PairedFastqReader::new_separate(Cursor::new(&data1[..]), Cursor::new(&data2[..]));
-
-        r.next_pair().unwrap();
-        assert!(r.next_pair().is_err());
-    }
-
-    #[test]
-    fn strip_read_suffix_removes_slash_suffixes() {
-        assert_eq!(strip_read_suffix("read1/1"), "read1");
-        assert_eq!(strip_read_suffix("read1/2"), "read1");
-        assert_eq!(strip_read_suffix("read1"), "read1");
-        assert_eq!(strip_read_suffix("read/1/extra"), "read/1/extra");
+    fn parse_fastq_error_reports_record_position() {
+        // 第一条记录正常，第二条记录损坏 —— 错误应指向 record 2
+        let data = b"@r1\nA\n+\nI\n@r2\nACGT\nIIII\n";
+        let mut r = FastqReader::new(Cursor::new(&data[..]));
+        assert!(r.next_record().unwrap().is_some());
+        let err = r.next_record().unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("record 2"), "expected record 2 in error, got: {}", msg);
     }
 }

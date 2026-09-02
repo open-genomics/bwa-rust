@@ -12,20 +12,15 @@
 //! ## 快速示例
 //!
 //! ```rust,no_run
-//! use bwa_rust::index::{sa, bwt, fm};
+//! use std::io::Cursor;
+//!
+//! use bwa_rust::index::builder::build_fm_index;
 //! use bwa_rust::util::dna;
 //!
-//! // 构建 FM 索引
-//! let reference = b"ACGTACGTAGCTGATCGTAG";
-//! let norm = dna::normalize_seq(reference);
-//! let mut text: Vec<u8> = norm.iter().map(|&b| dna::to_alphabet(b)).collect();
-//! let len = text.len() as u32;
-//! let contigs = vec![fm::Contig { name: "ref".to_string(), len, offset: 0 }];
-//! text.push(0);
-//!
-//! let sa_arr = sa::build_sa(&text);
-//! let bwt_arr = bwt::build_bwt(&text, &sa_arr);
-//! let fm_idx = fm::FMIndex::build(text, bwt_arr, sa_arr, contigs, dna::SIGMA as u8, 16);
+//! // 从 FASTA 构建 FM 索引（推荐路径，内部布局由库管理）
+//! let fasta = b">ref\nACGTACGTAGCTGATCGTAG\n";
+//! let result = build_fm_index(Cursor::new(&fasta[..]), 16).unwrap();
+//! let fm_idx = result.fm;
 //!
 //! // 精确匹配搜索
 //! let pattern: Vec<u8> = b"GCTGATC".iter().map(|&b| dna::to_alphabet(b)).collect();
@@ -68,6 +63,6 @@ pub(crate) mod testutil {
         text.push(0);
         let sa_arr = sa::build_sa(&text);
         let bwt_arr = bwt::build_bwt(&text, &sa_arr);
-        FMIndex::build(text, bwt_arr, sa_arr, contigs, dna::SIGMA as u8, 4)
+        FMIndex::build(text, bwt_arr, sa_arr, contigs, dna::SIGMA as u8, 4).expect("test FM build failed")
     }
 }

@@ -3,32 +3,6 @@ use crate::index::fm::FMIndex;
 /// Default maximum occurrences for MEM seeds (skip highly repetitive seeds)
 pub const DEFAULT_MAX_OCC: usize = 500;
 
-/// 对齐区域结构，类似 BWA 的 mem_alnreg_t。
-///
-/// 当前版本（v0.1.0）的 pipeline 使用 `candidate::AlignCandidate` 作为内部候选表示。
-/// `AlnReg` 保留为公开 API 类型，供未来配对端（PE）对齐和库模式调用使用。
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct AlnReg {
-    /// read 上的区间 [qb, qe)
-    pub qb: usize,
-    pub qe: usize,
-    /// 参考上的区间 [rb, re)
-    pub rb: u32,
-    pub re: u32,
-    /// contig 索引
-    pub contig: usize,
-    /// 对齐得分
-    pub score: i32,
-    /// 次优得分
-    pub sub_score: i32,
-    /// CIGAR
-    pub cigar: String,
-    /// edit distance
-    pub nm: u32,
-    /// 是否反向互补
-    pub is_rev: bool,
-}
-
 /// MEM 种子
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct MemSeed {
@@ -55,7 +29,7 @@ pub fn find_smem_seeds_with_max_occ(fm: &FMIndex, query_alpha: &[u8], min_len: u
         return Vec::new();
     }
 
-    let bwt_len = fm.bwt.len();
+    let bwt_len = fm.bwt().len();
     let mut raw_mems: Vec<(usize, usize, usize, usize)> = Vec::new(); // (qb, qe, sa_l, sa_r)
 
     // 第一步：对每个右端点 qe，通过增量左扩展找到最长精确匹配。
@@ -104,7 +78,7 @@ pub fn find_smem_seeds_with_max_occ(fm: &FMIndex, query_alpha: &[u8], min_len: u
         let seed_len = (qe - qb) as u32;
         fm.for_each_sa_interval_position(*l, *r, |sa_pos| {
             if let Some((ci, off)) = fm.map_text_pos(sa_pos) {
-                let contig_len = fm.contigs[ci].len;
+                let contig_len = fm.contigs()[ci].len;
                 if off + seed_len <= contig_len {
                     seeds.push(MemSeed {
                         contig: ci,
@@ -235,7 +209,7 @@ mod tests {
             assert!(s.qe > s.qb, "seed query end <= begin");
             assert!(s.re > s.rb, "seed ref end <= begin");
             assert_eq!(s.qe - s.qb, (s.re - s.rb) as usize, "seed length mismatch");
-            assert!(s.re <= fm.contigs[s.contig].len, "seed exceeds contig");
+            assert!(s.re <= fm.contigs()[s.contig].len, "seed exceeds contig");
         }
     }
 
