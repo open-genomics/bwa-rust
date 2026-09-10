@@ -12,9 +12,13 @@ on:
 
 permissions:
   contents: read
-  # rustsec/audit-check 发现漏洞时会尝试开 issue 汇报。缺此权限时，它会在
-  # 报告漏洞之后以 "Resource not accessible by integration" 失败，
-  # 让真正的安全发现淹没在权限错误里。
+  # rustsec/audit-check 有两条汇报通道，两条都需要写权限，缺任一条都会以
+  # "Resource not accessible by integration" 失败：
+  #   checks: write  写 check run —— 主通道，无论有无漏洞都会走
+  #   issues: write  发现漏洞时开 issue 跟踪
+  # 之前只有 contents: read，于是漏洞结果被权限错误掩盖（实测：修完依赖后
+  # 漏洞已归零，但 job 仍因 check run 写不进去而失败）。
+  checks: write
   issues: write
 
 concurrency:
