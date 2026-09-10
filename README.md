@@ -1,7 +1,6 @@
 # bwa-rust
 
-[![CI](https://github.com/AICL-Lab/bwa-rust/actions/workflows/ci.yml/badge.svg)](https://github.com/AICL-Lab/bwa-rust/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/AICL-Lab/bwa-rust?color=blue)](https://github.com/AICL-Lab/bwa-rust/releases)
+[![CI](https://github.com/open-genomics/bwa-rust/actions/workflows/ci.yml/badge.svg)](https://github.com/open-genomics/bwa-rust/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Rust](https://img.shields.io/badge/rust-1.85%2B-orange.svg)](Cargo.toml)
 
@@ -22,7 +21,19 @@
 
 ## 安装
 
-从 [GitHub Releases](https://github.com/AICL-Lab/bwa-rust/releases) 下载对应平台产物：
+目前**仅支持从源码构建**——预编译产物尚未发布。
+
+```bash
+git clone https://github.com/open-genomics/bwa-rust.git
+cd bwa-rust
+cargo build --release
+```
+
+需要 Rust 1.85 或更高版本。
+
+<!--
+发布流程（.github/workflows/release.yml）已就绪，打 tag 即可产出以下产物。
+产物发布后，把本节改为「从 GitHub Releases 下载」并恢复下表：
 
 | 平台 | 产物 |
 |------|------|
@@ -31,14 +42,7 @@
 | macOS Intel | `bwa-rust-macos-amd64.tar.gz` |
 | macOS Apple Silicon | `bwa-rust-macos-arm64.tar.gz` |
 | Windows | `bwa-rust-windows-amd64.zip` |
-
-从源码构建：
-
-```bash
-git clone https://github.com/AICL-Lab/bwa-rust.git
-cd bwa-rust
-cargo build --release
-```
+-->
 
 ## 快速开始
 

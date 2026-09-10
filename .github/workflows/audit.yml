@@ -12,6 +12,10 @@ on:
 
 permissions:
   contents: read
+  # rustsec/audit-check 发现漏洞时会尝试开 issue 汇报。缺此权限时，它会在
+  # 报告漏洞之后以 "Resource not accessible by integration" 失败，
+  # 让真正的安全发现淹没在权限错误里。
+  issues: write
 
 concurrency:
   group: audit-${{ github.ref }}
