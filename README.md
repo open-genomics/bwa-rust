@@ -83,6 +83,7 @@ FASTA/FASTQ -> FM-index -> SMEM seeds -> chains -> Smith-Waterman -> SAM
 - `src/io/`：FASTA、FASTQ、SAM 解析与格式化。
 - `src/util/dna.rs`：DNA 归一化、字母表映射、反向互补。
 - `src/error.rs`：库级结构化错误类型（`BwaError`），供库模式调用方编程式处理。
+- `examples/simple_align.rs`：库模式使用示例，运行 `cargo run --example simple_align`。
 
 ## 索引文件格式
 
