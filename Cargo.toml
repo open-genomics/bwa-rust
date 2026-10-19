@@ -2,7 +2,7 @@
 name = "bwa-rust"
 version = "0.2.0"
 edition = "2021"
-authors = ["LessUp"]
+authors = ["holtwood"]
 description = "A BWA-inspired sequence aligner implemented in Rust, featuring FM-index, SMEM seeding, and banded Smith-Waterman alignment"
 license = "MIT"
 repository = "https://github.com/open-genomics/bwa-rust"
