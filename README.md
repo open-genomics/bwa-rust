@@ -4,6 +4,11 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Rust](https://img.shields.io/badge/rust-1.85%2B-orange.svg)](Cargo.toml)
 
+> **项目状态：已归档（2026-10）。** 比对器开发已由
+> [minibwa-rust](https://github.com/open-genomics/minibwa-rust) 承接——它移植
+> lh3/minibwa（bwa-mem 的继任者），索引与 C 版字节级兼容、有 CI 对照验证，功能覆盖至配对端。
+> 本仓库保留为「从零实现」的完整参考（FM-index → SMEM → chaining → SW → SAM 全链路），不再接受功能开发。
+
 用 Rust 实现的内存安全 BWA-MEM 风格单端 DNA 短读比对器。
 
 ## 已交付能力
