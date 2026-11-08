@@ -86,6 +86,7 @@ pub fn generate_sa_tag(
     candidates: &[AlignCandidate],
     classification: &[(usize, AlignmentType)],
     emitted: &[bool],
+    mapqs: &[u8],
 ) -> String {
     let mut entries: Vec<String> = Vec::new();
 
@@ -97,9 +98,8 @@ pub fn generate_sa_tag(
 
         let cand = &candidates[idx];
         let strand = if cand.is_rev { '-' } else { '+' };
-        // MAPQ is computed elsewhere, use 0 as placeholder for now
-        // In a full implementation, we'd need to pass the MAPQ values
-        let mapq = 0;
+        // SA 的 mapq 必须是该比对自身的 MAPQ，不能沿用主记录的占位值。
+        let mapq = mapqs.get(idx).copied().unwrap_or(0);
 
         entries.push(format!(
             "{},{},{},{},{},{};",
@@ -247,11 +247,12 @@ mod tests {
         ];
         let classification = vec![(0, AlignmentType::Primary), (1, AlignmentType::Supplementary)];
         let emitted = vec![true, true];
+        let mapqs = vec![60, 42];
 
-        // SA:Z for primary should list the supplementary
-        let sa = generate_sa_tag(0, &candidates, &classification, &emitted);
+        // SA:Z for primary should list the supplementary with its own MAPQ.
+        let sa = generate_sa_tag(0, &candidates, &classification, &emitted, &mapqs);
         assert!(sa.contains("chr2"));
-        assert!(sa.contains(','));
+        assert!(sa.contains(",42,0;"));
         assert!(sa.ends_with(';'));
     }
 
@@ -263,10 +264,12 @@ mod tests {
         ];
         let classification = vec![(0, AlignmentType::Primary), (1, AlignmentType::Supplementary)];
         let emitted = vec![true, true];
+        let mapqs = vec![60, 42];
 
-        // SA:Z for supplementary should list the primary
-        let sa = generate_sa_tag(1, &candidates, &classification, &emitted);
+        // SA:Z for supplementary should list the primary with its MAPQ.
+        let sa = generate_sa_tag(1, &candidates, &classification, &emitted, &mapqs);
         assert!(sa.contains("chr1"));
+        assert!(sa.contains(",60,0;"));
         assert!(sa.ends_with(';'));
     }
 
@@ -275,9 +278,10 @@ mod tests {
         let candidates = vec![make_candidate(50, 0, 20, false, "chr1", 100)];
         let classification = vec![(0, AlignmentType::Primary)];
         let emitted = vec![true];
+        let mapqs = vec![60];
 
         // SA:Z for single alignment should be empty
-        let sa = generate_sa_tag(0, &candidates, &classification, &emitted);
+        let sa = generate_sa_tag(0, &candidates, &classification, &emitted, &mapqs);
         assert!(sa.is_empty());
     }
 
@@ -291,8 +295,9 @@ mod tests {
         ];
         let classification = vec![(0, AlignmentType::Primary), (1, AlignmentType::Supplementary)];
         let emitted = vec![true, false];
+        let mapqs = vec![60, 42];
 
-        let sa = generate_sa_tag(0, &candidates, &classification, &emitted);
+        let sa = generate_sa_tag(0, &candidates, &classification, &emitted, &mapqs);
         assert!(sa.is_empty());
     }
 }

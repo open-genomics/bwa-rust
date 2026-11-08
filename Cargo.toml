@@ -7,7 +7,7 @@ description = "A BWA-inspired sequence aligner implemented in Rust, featuring FM
 license = "MIT"
 repository = "https://github.com/open-genomics/bwa-rust"
 readme = "README.md"
-rust-version = "1.85"
+rust-version = "1.86"
 
 # ── 依赖 ──────────────────────────────────────────────
 

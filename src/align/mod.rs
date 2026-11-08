@@ -48,11 +48,11 @@ pub struct AlignOpt {
 impl Default for AlignOpt {
     fn default() -> Self {
         Self {
-            match_score: 2,
-            mismatch_penalty: 1,
-            gap_open: 2,
+            match_score: 1,
+            mismatch_penalty: 4,
+            gap_open: 6,
             gap_extend: 1,
-            clip_penalty: 1,
+            clip_penalty: 0,
             band_width: 16,
             score_threshold: 20,
             min_seed_len: 19,

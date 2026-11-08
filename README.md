@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/open-genomics/bwa-rust/actions/workflows/ci.yml/badge.svg)](https://github.com/open-genomics/bwa-rust/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Rust](https://img.shields.io/badge/rust-1.85%2B-orange.svg)](Cargo.toml)
+[![Rust](https://img.shields.io/badge/rust-1.86%2B-orange.svg)](Cargo.toml)
 
 > **项目状态：已归档（2026-10）。** 比对器开发已由
 > [minibwa-rust](https://github.com/open-genomics/minibwa-rust) 承接——它移植
@@ -34,7 +34,7 @@ cd bwa-rust
 cargo build --release
 ```
 
-需要 Rust 1.85 或更高版本。
+需要 Rust 1.86 或更高版本。
 
 <!--
 发布流程（.github/workflows/release.yml）已就绪，打 tag 即可产出以下产物。
@@ -66,8 +66,8 @@ bwa-rust mem reference.fa reads.fq -t 4 -o output.sam
 
 | 参数 | 默认值 |
 |------|--------|
-| match / mismatch | `2 / 1` |
-| gap open / extend | `2 / 1` |
+| match / mismatch | `1 / 4` |
+| gap open / extend | `6 / 1` |
 | band width | `16` |
 | score threshold | `20` |
 | min seed length | `19` |

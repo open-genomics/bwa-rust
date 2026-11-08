@@ -24,9 +24,15 @@ pub fn build_sa(text: &[u8]) -> Vec<u32> {
     if n == 0 {
         return Vec::new();
     }
+    // 后缀数组对外用 u32，超出该范围无法表示；秩值用 i64，避免参考文本
+    // 超过 2^31 bp 时 i32 累加溢出（3Gbp 级别的人类基因组仍在 u32 范围内）。
+    assert!(
+        n <= u32::MAX as usize,
+        "reference length {n} exceeds u32 suffix array limit"
+    );
     let mut sa: Vec<usize> = (0..n).collect();
-    let mut rank: Vec<i32> = text.iter().map(|&b| b as i32).collect();
-    let mut tmp: Vec<i32> = vec![0; n];
+    let mut rank: Vec<i64> = text.iter().map(|&b| i64::from(b)).collect();
+    let mut tmp: Vec<i64> = vec![0; n];
 
     let mut k = 1usize;
     while k < n {

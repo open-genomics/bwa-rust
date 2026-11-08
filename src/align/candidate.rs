@@ -148,7 +148,23 @@ fn refine_candidate_alignment(
         return None;
     }
 
-    let res = sw::semiglobal_align_with_buf(query_norm, &reference[window_start..window_end], sw_params, sw_buf);
+    // 用链内种子的参考/查询起点差估计对角线，把重打分的 DP 限制在
+    // band_width 内；窗口两端仍保留 pad，允许 seed 之外的轻微偏移。
+    let mut diagonals: Vec<isize> = chain
+        .seeds
+        .iter()
+        .map(|s| s.rb as isize - window_start as isize - s.qb as isize)
+        .collect();
+    diagonals.sort_unstable();
+    let band_center = diagonals[diagonals.len() / 2];
+
+    let res = sw::semiglobal_align_banded_with_buf(
+        query_norm,
+        &reference[window_start..window_end],
+        sw_params,
+        band_center,
+        sw_buf,
+    );
     if res.score <= 0 || res.cigar.is_empty() {
         return None;
     }

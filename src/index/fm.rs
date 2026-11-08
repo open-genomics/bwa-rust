@@ -196,16 +196,25 @@ impl FMIndex {
         }
         let rate = self.sa_sample_rate as usize;
         let n = self.bwt.len() as u32;
+        if n == 0 || idx >= self.bwt.len() {
+            return u32::MAX;
+        }
         let mut steps = 0u32;
-        loop {
+        // LF 映射在合法索引上必然收敛到采样点；伪造索引可能构成环，
+        // 用 BWT 长度作为迭代上限，避免无限循环。
+        while steps <= n {
             if idx % rate == 0 {
                 return (self.sa[idx / rate] + steps) % n;
             }
             // LF-mapping: idx = C[BWT[idx]] + Occ(BWT[idx], idx)
             let ch = self.bwt[idx];
             idx = self.c[ch as usize] as usize + self.occ(ch, idx) as usize;
+            if idx >= self.bwt.len() {
+                return u32::MAX;
+            }
             steps += 1;
         }
+        u32::MAX
     }
 
     pub fn set_meta(&mut self, meta: IndexMeta) {
@@ -288,6 +297,15 @@ impl FMIndex {
         if self.c.len() != self.sigma as usize {
             return Err(anyhow!("invalid FM index file: C table length does not match sigma"));
         }
+        if self.c.first().copied() != Some(0) {
+            return Err(anyhow!("invalid FM index file: C table must start at 0"));
+        }
+        if !self.c.windows(2).all(|w| w[0] <= w[1]) {
+            return Err(anyhow!("invalid FM index file: C table is not non-decreasing"));
+        }
+        if self.c.last().is_some_and(|&last| last as usize > self.bwt.len()) {
+            return Err(anyhow!("invalid FM index file: C table exceeds BWT length"));
+        }
         let expected_blocks = if self.bwt.is_empty() {
             0
         } else {
@@ -346,9 +364,10 @@ impl FMIndex {
     #[inline]
     pub fn occ(&self, c: u8, pos: usize) -> u32 {
         // 返回 BWT[0..pos) 中 c 的出现次数
-        if pos == 0 {
+        if pos == 0 || c as usize >= self.sigma as usize {
             return 0;
         }
+        let pos = pos.min(self.bwt.len());
         let sigma_us = self.sigma as usize;
         let block = self.block as usize;
         let bi = (pos - 1) / block; // 所在块编号
@@ -366,6 +385,11 @@ impl FMIndex {
     #[inline]
     pub fn rank_range(&self, c: u8, l: usize, r: usize) -> (usize, usize) {
         // 返回在区间 [l, r) 上扩展字符 c 后的新区间
+        if c as usize >= self.sigma as usize {
+            return (0, 0);
+        }
+        let l = l.min(self.bwt.len());
+        let r = r.min(self.bwt.len()).max(l);
         let c0 = self.c[c as usize] as usize;
         let nl = c0 + self.occ(c, l) as usize;
         let nr = c0 + self.occ(c, r) as usize;
@@ -442,6 +466,8 @@ impl FMIndex {
 
     /// 取出 SA 区间对应的文本位置
     pub fn sa_interval_positions(&self, l: usize, r: usize) -> Vec<u32> {
+        let l = l.min(self.sa.len());
+        let r = r.min(self.sa.len()).max(l);
         if self.sa_sample_rate <= 1 {
             self.sa[l..r].to_vec()
         } else {
@@ -453,6 +479,8 @@ impl FMIndex {
     where
         F: FnMut(u32),
     {
+        let l = l.min(self.sa.len());
+        let r = r.min(self.sa.len()).max(l);
         if self.sa_sample_rate <= 1 {
             for &pos in &self.sa[l..r] {
                 f(pos);
@@ -661,6 +689,27 @@ mod tests {
                 prev_l = nl;
             }
         }
+    }
+
+    #[test]
+    fn fm_rejects_invalid_c_table() {
+        let mut fm = build_toy_fm(&[1, 2, 3, 4, 1, 2, 3, 4]);
+        fm.c[0] = 1;
+        assert!(fm.validate().is_err(), "C table must start at 0");
+
+        let mut fm = build_toy_fm(&[1, 2, 3, 4, 1, 2, 3, 4]);
+        fm.c[2] = 0;
+        assert!(fm.validate().is_err(), "C table must be non-decreasing");
+    }
+
+    #[test]
+    fn fm_rank_range_and_sa_interval_are_bounds_safe() {
+        let fm = build_toy_fm(&[1, 2, 3, 4, 1, 2, 3, 4]);
+
+        assert_eq!(fm.rank_range(250, 0, 10), (0, 0));
+        assert_eq!(fm.rank_range(1, 0, usize::MAX), fm.rank_range(1, 0, fm.bwt.len()));
+        let positions = fm.sa_interval_positions(0, usize::MAX);
+        assert_eq!(positions.len(), fm.sa.len());
     }
 
     #[test]

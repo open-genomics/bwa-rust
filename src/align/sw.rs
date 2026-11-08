@@ -218,6 +218,116 @@ fn fill_gs_traces(query: &[u8], reference: &[u8], p: SwParams, buf: &mut SwBuffe
     }
 }
 
+/// 以预期对角线为中心的带状 semiglobal 填充。
+///
+/// 只计算 `|j - i - center| <= band_width` 的单元；带外保持 `NEG_INF`，
+/// 因此末端选取与回溯都不会越出带。首行仍按 semiglobal 规则免费置 0，
+/// 但仅限带内 `j`。
+fn fill_gs_traces_banded(query: &[u8], reference: &[u8], p: SwParams, buf: &mut SwBuffer, center: isize) {
+    let m = query.len();
+    let n = reference.len();
+    let cols = n + 1;
+    buf.resize_affine((m + 1) * cols);
+    let band = p.band_width as isize;
+    let match_mat = &mut buf.h;
+    let ins_mat = &mut buf.e;
+    let del_mat = &mut buf.f;
+    let match_trace = &mut buf.match_trace;
+    let ins_trace = &mut buf.ins_trace;
+    let del_trace = &mut buf.del_trace;
+    let idx = |i: usize, j: usize| i * cols + j;
+
+    let row_lo_raw = center - band;
+    let row_hi_raw = center + band;
+    if row_hi_raw >= 0 && row_lo_raw <= n as isize {
+        let row_lo = row_lo_raw.max(0) as usize;
+        let row_hi = row_hi_raw.min(n as isize) as usize;
+        for j in row_lo..=row_hi {
+            match_mat[idx(0, j)] = 0;
+        }
+    }
+
+    let col_lo_raw = -(center + band);
+    let col_hi_raw = band - center;
+    if col_hi_raw >= 0 && col_lo_raw <= m as isize {
+        let col_lo = col_lo_raw.max(0) as usize;
+        let col_hi = col_hi_raw.min(m as isize) as usize;
+        for i in col_lo..=col_hi {
+            if i == 0 {
+                continue;
+            }
+            let cur = idx(i, 0);
+            let prev = idx(i - 1, 0);
+            let open = penalize(match_mat[prev], p.gap_open + p.gap_extend);
+            let extend = penalize(ins_mat[prev], p.gap_extend);
+            if open >= extend {
+                ins_mat[cur] = open;
+                ins_trace[cur] = trace_to_u8(TraceState::Match);
+            } else {
+                ins_mat[cur] = extend;
+                ins_trace[cur] = trace_to_u8(TraceState::Ins);
+            }
+        }
+    }
+
+    for i in 1..=m {
+        let lo_raw = i as isize + center - band;
+        let hi_raw = i as isize + center + band;
+        if hi_raw < 1 || lo_raw > n as isize {
+            continue;
+        }
+        let lo = lo_raw.max(1) as usize;
+        let hi = hi_raw.min(n as isize) as usize;
+        for j in lo..=hi {
+            let cur = idx(i, j);
+            let diag = idx(i - 1, j - 1);
+            let up = idx(i - 1, j);
+            let left = idx(i, j - 1);
+
+            let subst = if query[i - 1] == reference[j - 1] {
+                p.match_score
+            } else {
+                -p.mismatch_penalty
+            };
+
+            let mut best_prev = match_mat[diag];
+            let mut best_state = TraceState::Match;
+            if ins_mat[diag] > best_prev {
+                best_prev = ins_mat[diag];
+                best_state = TraceState::Ins;
+            }
+            if del_mat[diag] > best_prev {
+                best_prev = del_mat[diag];
+                best_state = TraceState::Del;
+            }
+            if best_prev > NEG_INF / 2 {
+                match_mat[cur] = best_prev + subst;
+                match_trace[cur] = trace_to_u8(best_state);
+            }
+
+            let open_ins = penalize(match_mat[up], p.gap_open + p.gap_extend);
+            let extend_ins = penalize(ins_mat[up], p.gap_extend);
+            if open_ins >= extend_ins {
+                ins_mat[cur] = open_ins;
+                ins_trace[cur] = trace_to_u8(TraceState::Match);
+            } else {
+                ins_mat[cur] = extend_ins;
+                ins_trace[cur] = trace_to_u8(TraceState::Ins);
+            }
+
+            let open_del = penalize(match_mat[left], p.gap_open + p.gap_extend);
+            let extend_del = penalize(del_mat[left], p.gap_extend);
+            if open_del >= extend_del {
+                del_mat[cur] = open_del;
+                del_trace[cur] = trace_to_u8(TraceState::Match);
+            } else {
+                del_mat[cur] = extend_del;
+                del_trace[cur] = trace_to_u8(TraceState::Del);
+            }
+        }
+    }
+}
+
 /// 端到端全覆盖比对。
 /// 用于链内两个锚点之间的 gap 补齐，必须同时覆盖完整 query/reference 片段。
 pub fn global_align(query: &[u8], reference: &[u8], p: SwParams) -> SwResult {
@@ -310,6 +420,30 @@ pub fn semiglobal_align(query: &[u8], reference: &[u8], p: SwParams) -> SwResult
 
 /// 同 [`semiglobal_align`]，但接受外部 [`SwBuffer`] 复用内存。
 pub fn semiglobal_align_with_buf(query: &[u8], reference: &[u8], p: SwParams, buf: &mut SwBuffer) -> SwResult {
+    semiglobal_impl(query, reference, p, buf, None)
+}
+
+/// 以预期对角线 `ref_offset`（reference 下标减 query 下标）为中心的带状 semiglobal。
+///
+/// 候选重打分已经知道 seed 的对角线，使用该入口把 DP 限制在
+/// `|j - i - ref_offset| <= band_width`，避免对整个窗口做全矩阵填充。
+pub fn semiglobal_align_banded_with_buf(
+    query: &[u8],
+    reference: &[u8],
+    p: SwParams,
+    ref_offset: isize,
+    buf: &mut SwBuffer,
+) -> SwResult {
+    semiglobal_impl(query, reference, p, buf, Some(ref_offset))
+}
+
+fn semiglobal_impl(
+    query: &[u8],
+    reference: &[u8],
+    p: SwParams,
+    buf: &mut SwBuffer,
+    band_center: Option<isize>,
+) -> SwResult {
     let m = query.len();
     let n = reference.len();
 
@@ -337,7 +471,10 @@ pub fn semiglobal_align_with_buf(query: &[u8], reference: &[u8], p: SwParams, bu
         };
     }
 
-    fill_gs_traces(query, reference, p, buf, true);
+    match band_center {
+        Some(center) => fill_gs_traces_banded(query, reference, p, buf, center),
+        None => fill_gs_traces(query, reference, p, buf, true),
+    }
 
     let cols = n + 1;
     let idx = |i: usize, j: usize| i * cols + j;
@@ -348,10 +485,20 @@ pub fn semiglobal_align_with_buf(query: &[u8], reference: &[u8], p: SwParams, bu
     let ins_trace = &mut buf.ins_trace;
     let del_trace = &mut buf.del_trace;
 
-    let mut best_j = 0usize;
+    let (search_lo, search_hi) = match band_center {
+        Some(center) => {
+            let band = p.band_width as isize;
+            let lo = (m as isize + center - band).clamp(0, n as isize);
+            let hi = (m as isize + center + band).clamp(lo, n as isize);
+            (lo as usize, hi as usize)
+        }
+        None => (0, n),
+    };
+
+    let mut best_j = search_lo.min(n);
     let mut score = NEG_INF;
     let mut state = TraceState::Start;
-    for j in 0..=n {
+    for j in search_lo..=search_hi {
         let cur = idx(m, j);
         if match_mat[cur] > score {
             score = match_mat[cur];
@@ -1124,5 +1271,26 @@ mod tests {
         assert!(res.cigar.contains('I'));
         assert!(!res.cigar.contains('S'));
         assert_eq!(res.nm, 1);
+    }
+    #[test]
+    fn semiglobal_banded_matches_unbanded_when_offset_within_band() {
+        let p = SwParams {
+            match_score: 1,
+            mismatch_penalty: 4,
+            gap_open: 6,
+            gap_extend: 1,
+            band_width: 8,
+        };
+        let query = b"GGCCAAATTGGCCAATTGGCC";
+        let reference = b"TTTGGCCAATTGGCCAATTGGCCTTT";
+        let offset = 3isize;
+
+        let unbanded = semiglobal_align(query, reference, p);
+        let banded = semiglobal_align_banded_with_buf(query, reference, p, offset, &mut SwBuffer::new());
+
+        assert_eq!(banded.score, unbanded.score);
+        assert_eq!(banded.cigar, unbanded.cigar);
+        assert_eq!(banded.ref_start, unbanded.ref_start);
+        assert_eq!(banded.ref_end, unbanded.ref_end);
     }
 }

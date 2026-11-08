@@ -41,14 +41,21 @@ echo "=== Comparison ==="
 
 count_mapped() {
     local sam_file="$1"
-    # 跳过 header 行，统计 mapped (FLAG 没有 0x4 位) 和 unmapped
-    local total mapped unmapped
-    total=$(grep -cv '^@' "$sam_file" || true)
-    unmapped=$(awk '!/^@/ && and($2, 4)' "$sam_file" | wc -l || true)
-    mapped=$((total - unmapped))
-    echo "  Total reads: $total"
-    echo "  Mapped:      $mapped"
-    echo "  Unmapped:    $unmapped"
+    # 跳过 header 与非 SAM 记录，按 QNAME 去重；任一记录 FLAG 无 0x4 位即算 mapped
+    awk '
+        !/^@/ && NF >= 11 && $2 ~ /^[0-9]+$/ {
+            if (!($1 in seen)) {
+                seen[$1] = 1
+                total++
+            }
+            if (int($2 / 4) % 2 == 0) mapped[$1] = 1
+        }
+        END {
+            for (q in mapped) mapped_total++
+            printf "  Total reads: %d\n", total + 0
+            printf "  Mapped:      %d\n", mapped_total + 0
+            printf "  Unmapped:    %d\n", total - mapped_total
+        }' "$sam_file"
 }
 
 if [ -f "$BWA_SAM" ]; then

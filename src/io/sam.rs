@@ -39,8 +39,20 @@ pub fn write_header<W: Write, S: AsRef<str>>(out: &mut W, contigs: &[(S, u32)]) 
     Ok(())
 }
 
+/// SAM 规范：SEQ 为空时不输出空字段，SEQ/QUAL 统一写 `*`。
+fn sam_seq_qual<'a>(seq: &'a str, qual: &'a str) -> (&'a str, &'a str) {
+    if seq.is_empty() {
+        ("*", "*")
+    } else if qual.is_empty() {
+        (seq, "*")
+    } else {
+        (seq, qual)
+    }
+}
+
 /// Write an unmapped SAM record (FLAG=UNMAP) to `out`.
 pub fn write_unmapped<W: Write>(out: &mut W, qname: &str, seq: &str, qual: &str) -> std::io::Result<()> {
+    let (seq, qual) = sam_seq_qual(seq, qual);
     writeln!(
         out,
         "{}\t{}\t*\t0\t0\t*\t*\t0\t0\t{}\t{}",
@@ -71,6 +83,7 @@ pub fn write_record<W: Write>(
     md_tag: &str,
     sa_tag: &str,
 ) -> std::io::Result<()> {
+    let (seq, qual) = sam_seq_qual(seq, qual);
     write!(
         out,
         "{}\t{}\t{}\t{}\t{}\t{}\t*\t0\t0\t{}\t{}\tAS:i:{}\tXS:i:{}\tNM:i:{}",
@@ -89,6 +102,7 @@ pub fn write_record<W: Write>(
 ///
 /// 保留字符串版本供比对管线在批量场景下使用（并行收集后统一写出）。
 pub fn format_unmapped(qname: &str, seq: &str, qual: &str) -> String {
+    let (seq, qual) = sam_seq_qual(seq, qual);
     format!("{}\t{}\t*\t0\t0\t*\t*\t0\t0\t{}\t{}", qname, flags::UNMAP, seq, qual,)
 }
 
@@ -111,6 +125,7 @@ pub fn format_record_with_optional_tags(
     md_tag: &str,
     sa_tag: &str,
 ) -> String {
+    let (seq, qual) = sam_seq_qual(seq, qual);
     let mut line = format!(
         "{}\t{}\t{}\t{}\t{}\t{}\t*\t0\t0\t{}\t{}\tAS:i:{}\tXS:i:{}\tNM:i:{}",
         qname, flag, rname, pos, mapq, cigar, seq, qual, score, sub_score, nm,
@@ -479,5 +494,43 @@ mod tests {
     fn md_tag_empty() {
         let md = generate_md_tag(b"", b"", "");
         assert_eq!(md, "");
+    }
+
+    #[test]
+    fn unmapped_empty_read_uses_star_seq_qual_fields() {
+        let line = format_unmapped("empty", "", "");
+        let fields: Vec<&str> = line.split('\t').collect();
+        assert_eq!(fields.len(), 11);
+        assert_eq!(fields[9], "*");
+        assert_eq!(fields[10], "*");
+    }
+
+    #[test]
+    fn write_unmapped_empty_read_uses_star_seq_qual_fields() {
+        let mut buf = Vec::new();
+        write_unmapped(&mut buf, "empty", "", "").unwrap();
+        let line = String::from_utf8(buf).unwrap();
+        let fields: Vec<&str> = line.trim_end().split('\t').collect();
+        assert_eq!(fields.len(), 11);
+        assert_eq!(fields[9], "*");
+        assert_eq!(fields[10], "*");
+    }
+
+    #[test]
+    fn record_empty_read_uses_star_seq_qual_fields() {
+        let line = format_record_with_optional_tags("empty", 4, "*", 0, 0, "*", "", "", 0, 0, 0, "", "");
+        let fields: Vec<&str> = line.split('\t').collect();
+        assert_eq!(fields[9], "*");
+        assert_eq!(fields[10], "*");
+    }
+
+    #[test]
+    fn write_record_empty_read_uses_star_seq_qual_fields() {
+        let mut buf = Vec::new();
+        write_record(&mut buf, "empty", 4, "*", 0, 0, "*", "", "", 0, 0, 0, "", "").unwrap();
+        let line = String::from_utf8(buf).unwrap();
+        let fields: Vec<&str> = line.trim_end().split('\t').collect();
+        assert_eq!(fields[9], "*");
+        assert_eq!(fields[10], "*");
     }
 }

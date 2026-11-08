@@ -11,7 +11,7 @@ use crate::util::dna;
 
 use super::candidate::{collect_candidates, dedup_candidates, AlignCandidate, RefSeqCache};
 use super::mapq::compute_mapq;
-use super::supplementary::{classify_alignments, generate_sa_tag, AlignmentType};
+use super::supplementary::{are_non_overlapping, classify_alignments, generate_sa_tag, AlignmentType};
 use super::AlignOpt;
 use super::SwParams;
 
@@ -43,7 +43,9 @@ pub fn align_fastq_with_fm_opt(
         Box::new(std::io::BufWriter::new(std::io::stdout()))
     };
 
-    align_fastq_with_fm(reader, &mut out_box, &fm, &opt)
+    align_fastq_with_fm(reader, &mut out_box, &fm, &opt)?;
+    out_box.flush()?;
+    Ok(())
 }
 
 /// 泛型对齐入口：从任意 `R: BufRead` 读取 FASTQ，写入任意 `W: Write`。
@@ -263,6 +265,34 @@ pub(crate) fn align_single_read(
         .map(|(idx, cand)| idx < max_aln && cand.sort_score >= opt.score_threshold)
         .collect();
 
+    // 每条输出记录各自的 MAPQ：primary 用全局次优；supplementary 用自身与所有
+    // 重叠且已输出候选的次优分；secondary 按惯例为 0。
+    let mapqs: Vec<u8> = all_candidates
+        .iter()
+        .enumerate()
+        .map(|(idx, cand)| {
+            let align_type = classification
+                .iter()
+                .find(|(i, _)| *i == idx)
+                .map(|(_, t)| *t)
+                .unwrap_or(AlignmentType::Secondary);
+            match align_type {
+                AlignmentType::Primary => compute_mapq(best_sort_score, second_best_sort_score),
+                AlignmentType::Supplementary => {
+                    let second_best = all_candidates
+                        .iter()
+                        .enumerate()
+                        .filter(|(j, other)| *j != idx && emitted[*j] && !are_non_overlapping(cand, other))
+                        .map(|(_, other)| other.sort_score)
+                        .max()
+                        .unwrap_or(0);
+                    compute_mapq(cand.sort_score, second_best)
+                }
+                AlignmentType::Secondary => 0,
+            }
+        })
+        .collect();
+
     for (idx, cand) in all_candidates.iter().enumerate() {
         if cand.sort_score < opt.score_threshold {
             break;
@@ -289,11 +319,7 @@ pub(crate) fn align_single_read(
             AlignmentType::Supplementary => flag |= flags::SUPPLEMENTARY,
         }
 
-        let mapq = if idx == 0 {
-            compute_mapq(best_sort_score, second_best_sort_score)
-        } else {
-            0
-        };
+        let mapq = mapqs[idx];
 
         let sub_score = if idx == 0 {
             second_best_raw_score
@@ -316,7 +342,7 @@ pub(crate) fn align_single_read(
         };
 
         // Generate SA:Z tag（只引用本次实际输出的候选，保持一致性）
-        let sa_tag = generate_sa_tag(idx, &all_candidates, &classification, &emitted);
+        let sa_tag = generate_sa_tag(idx, &all_candidates, &classification, &emitted, &mapqs);
 
         sam_lines.push(sam::format_record_with_optional_tags(
             qname,
@@ -389,6 +415,9 @@ mod tests {
         let lines = align_single_read(&fm, &rec, default_sw(), &opt, &RefSeqCache::new()).unwrap();
         assert!(!lines.is_empty());
         assert!(lines[0].contains("\t4\t")); // unmapped
+        let fields: Vec<&str> = lines[0].split('\t').collect();
+        assert_eq!(fields[9], "*"); // zero-length read: SEQ must be "*"
+        assert_eq!(fields[10], "*"); // zero-length read: QUAL must be "*"
     }
 
     #[test]
