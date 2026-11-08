@@ -34,16 +34,35 @@ pub fn best_chain(seeds: &[MemSeed], max_gap: usize) -> Option<Chain> {
     let mut prev: Vec<Option<usize>> = vec![None; n];
     let mut best_i: Option<usize> = None;
 
+    // 前驱扫描窗口：可链接要求 si.qb - sj.qe <= max_gap，而 sj.qe <= sj.qb +
+    // 最长种子长度，因此 si.qb - sj.qb > max_gap + max_seed_len 的前驱必然不可
+    // 链接。排序后同一 contig 内 qb 不减，用只前进的下界指针跳过窗口外的前缀，
+    // 把每步的 O(S) 扫描收窄到实际窗口内的种子数（典型数据远小于 S）。
+    let max_seed_len = seeds.iter().map(|s| s.qe - s.qb).max().unwrap_or(0);
+    let window = max_gap.saturating_add(max_seed_len);
+    let mut group_start = 0usize;
+    let mut lo = 0usize;
+    let mut prev_contig: Option<usize> = None;
+
     for (t, &i) in idxs.iter().enumerate() {
         let si = &seeds[i];
         let len_i = (si.qe - si.qb) as u32;
         dp[t] = len_i;
 
-        for (u, &j) in idxs[..t].iter().enumerate() {
+        // contig 改变时重置窗口：不同 contig 的种子本就不能链接。
+        if prev_contig != Some(si.contig) {
+            prev_contig = Some(si.contig);
+            group_start = t;
+            lo = t;
+        }
+        let min_qb = si.qb.saturating_sub(window);
+        while lo < t && lo >= group_start && seeds[idxs[lo]].qb < min_qb {
+            lo += 1;
+        }
+
+        for (u, &j) in idxs[lo..t].iter().enumerate() {
+            let u = u + lo;
             let sj = &seeds[j];
-            if sj.contig != si.contig {
-                continue;
-            }
             if sj.qe > si.qb {
                 continue;
             }
@@ -675,5 +694,138 @@ mod tests {
         // With default limit, should get more
         let chains_default = build_chains(&seeds, 10);
         assert!(chains_default.len() >= chains.len());
+    }
+}
+
+#[cfg(test)]
+mod window_tests {
+    use super::*;
+
+    /// 原始 O(S²) 实现，作为剪枝版本的对照（访问顺序也保持一致）。
+    fn naive_best_chain(seeds: &[MemSeed], max_gap: usize) -> Option<Chain> {
+        if seeds.is_empty() {
+            return None;
+        }
+        let mut idxs: Vec<usize> = (0..seeds.len()).collect();
+        idxs.sort_by_key(|&i| {
+            let s = &seeds[i];
+            (s.contig, s.qb, s.rb)
+        });
+
+        let n = idxs.len();
+        let mut dp: Vec<u32> = vec![0; n];
+        let mut prev: Vec<Option<usize>> = vec![None; n];
+        let mut best_i: Option<usize> = None;
+
+        for (t, &i) in idxs.iter().enumerate() {
+            let si = &seeds[i];
+            let len_i = (si.qe - si.qb) as u32;
+            dp[t] = len_i;
+            for (u, &j) in idxs[..t].iter().enumerate() {
+                let sj = &seeds[j];
+                if sj.contig != si.contig {
+                    continue;
+                }
+                if sj.qe > si.qb {
+                    continue;
+                }
+                if sj.re > si.rb {
+                    continue;
+                }
+                let gap_q = si.qb - sj.qe;
+                let gap_r = (si.rb - sj.re) as usize;
+                if gap_q > max_gap || gap_r > max_gap {
+                    continue;
+                }
+                let cand = dp[u] + len_i;
+                if cand > dp[t] {
+                    dp[t] = cand;
+                    prev[t] = Some(u);
+                }
+            }
+            if best_i.map(|bi| dp[t] > dp[bi]).unwrap_or(true) {
+                best_i = Some(t);
+            }
+        }
+
+        let best_t = best_i?;
+        let mut chain_idxs: Vec<usize> = Vec::new();
+        let mut cur = Some(best_t);
+        while let Some(t) = cur {
+            chain_idxs.push(idxs[t]);
+            cur = prev[t];
+        }
+        chain_idxs.reverse();
+        let contig = seeds[chain_idxs[0]].contig;
+        let seeds_vec: Vec<MemSeed> = chain_idxs.into_iter().map(|i| seeds[i]).collect();
+        Some(Chain {
+            contig,
+            seeds: seeds_vec,
+            score: dp[best_t],
+        })
+    }
+
+    /// 确定性 LCG，避免为测试引入 rand 依赖。
+    struct Lcg(u64);
+
+    impl Lcg {
+        fn next(&mut self, bound: u32) -> u32 {
+            self.0 = self.0.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            ((self.0 >> 33) as u32) % bound
+        }
+    }
+
+    #[test]
+    fn windowed_best_chain_matches_naive_on_random_seeds() {
+        let mut rng = Lcg(0x2545_f491_4f6c_dd1d);
+        for round in 0..300 {
+            let count = 1 + (round % 40);
+            let mut seeds = Vec::new();
+            for _ in 0..count {
+                let qb = rng.next(400) as usize;
+                let len = 1 + rng.next(30) as usize;
+                let rb = rng.next(400);
+                seeds.push(MemSeed {
+                    contig: rng.next(3) as usize,
+                    qb,
+                    qe: qb + len,
+                    rb,
+                    re: rb + len as u32,
+                });
+            }
+            let max_gap = rng.next(60) as usize;
+            assert_eq!(
+                best_chain(&seeds, max_gap),
+                naive_best_chain(&seeds, max_gap),
+                "round {round} diverged (max_gap={max_gap})"
+            );
+        }
+    }
+
+    #[test]
+    fn windowed_best_chain_matches_naive_on_clustered_seeds() {
+        // 大量种子挤在很小的窗口内：剪枝不能漏掉它们，也不能改变并列时的选择。
+        let mut rng = Lcg(0x9e37_79b9_7f4a_7c15);
+        for round in 0..100 {
+            let count = 1 + (round % 50);
+            let mut seeds = Vec::new();
+            for _ in 0..count {
+                let qb = rng.next(40) as usize;
+                let len = 1 + rng.next(8) as usize;
+                seeds.push(MemSeed {
+                    contig: 0,
+                    qb,
+                    qe: qb + len,
+                    rb: rng.next(40),
+                    re: rng.next(40) + len as u32,
+                });
+            }
+            let max_gap = rng.next(12) as usize;
+            assert_eq!(
+                best_chain(&seeds, max_gap),
+                naive_best_chain(&seeds, max_gap),
+                "round {round} diverged (max_gap={max_gap})"
+            );
+        }
     }
 }
